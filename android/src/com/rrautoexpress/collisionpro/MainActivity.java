@@ -3,6 +3,7 @@ package com.rrautoexpress.collisionpro;
 import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.app.DownloadManager;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
@@ -79,7 +80,7 @@ public class MainActivity extends Activity {
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
         s.setSupportZoom(false);
-        s.setUserAgentString(s.getUserAgentString() + " RRAutoExpressApp/1.3");
+        s.setUserAgentString(s.getUserAgentString() + " RRAutoExpressApp/1.4");
         CookieManager.getInstance().setAcceptCookie(true);
 
         web.addJavascriptInterface(new Bridge(), "CPNative");
@@ -87,6 +88,29 @@ public class MainActivity extends Activity {
         sms = SmsEngine.get(this);
         web.setWebViewClient(new Client());
         web.setWebChromeClient(new Chrome());
+        web.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
+            Uri download = Uri.parse(url);
+            if (!"https".equals(download.getScheme()) || !HOST.equals(download.getHost()) || !download.getPath().endsWith(".apk")) {
+                Toast.makeText(this, "This download link is not supported", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (manager == null) {
+                Toast.makeText(this, "Download service is unavailable", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            try {
+                DownloadManager.Request request = new DownloadManager.Request(download)
+                    .setTitle("R&R Auto Express")
+                    .setDescription("Downloading Android app")
+                    .setMimeType("application/vnd.android.package-archive")
+                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                manager.enqueue(request);
+                Toast.makeText(this, "Download started. Open Downloads when it finishes.", Toast.LENGTH_LONG).show();
+            } catch (IllegalArgumentException e) {
+                Toast.makeText(this, "Could not start the app download", Toast.LENGTH_LONG).show();
+            }
+        });
 
         // Restored WebView state can be empty or stale after a process restart/update.
         // Always fall back to the production URL when restoration did not succeed.

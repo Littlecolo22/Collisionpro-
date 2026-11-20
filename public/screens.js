@@ -157,6 +157,7 @@ view('settings', async () => {
   const PT = ['OEM', 'aftermarket', 'recycled', 'reconditioned'];
   shell('Settings', esc(loc.name || ''), `<div class="page">
   <div class="card"><h3>Shop name</h3><p class="sm mut">Shown in the app header, on the sign-in screen, on estimate PDFs and on customer links.</p><div class="row"><input id="shn" class="grow" maxlength="80" value="${esc(st.shop_name || S.me?.shop_name || '')}"><button class="pri" id="shs">Save</button></div></div>
+  <div class="card"><h3>Android app</h3><p class="sm mut">Download the app on your Android phone. When the download finishes, open the APK and follow Android's install prompts.</p><a class="btn pri" href="/downloads/RR-Auto-Express.apk" download>Download Android app</a></div>
   <div class="card" id="emp"><h3>Employees</h3><p class="sm mut">Employees sign in with their own email and password. They can create and manage estimates only. They can't see Settings, rates, reports, invoices or other money screens.</p><div id="el">Loading…</div>
   <div class="grid2" style="margin-top:10px"><div><label>Name</label><input id="en" maxlength="80"></div><div><label>Email</label><input id="ee" type="email"></div><div><label>Temporary password (10+ characters)</label><input id="ep" type="text" autocomplete="off" minlength="10"></div><div style="align-self:end"><button class="pri" id="ea">Add employee</button></div></div></div>
   <div class="card" id="smsset"><h3>Texting</h3><p class="mut">Loading…</p></div>

@@ -56,7 +56,7 @@ Set production credentials as Cloudflare secrets, not in source files. `wrangler
 
 ### Android
 
-Android source is under `android/`. Review `android/build_apk.sh` and Android build notes. A personal signing keystore is required for release/update continuity; keep it outside the repository. No built APK is included yet; to host the app download on Pages, add the signed APK to the site's static assets and link to it.
+Android source is under `android/`. Build requirements are Android SDK platform/build tools 35, Java JDK, and Python 3. Launcher icons are included; Pillow and FreeSans are only needed if regenerating them. The signed APK is published from `public/downloads/RR-Auto-Express.apk`; after the Pages deployment finishes, the owner can download it from Settings. Keep `android/.keystore/` private and backed up: future APK updates must use the same signing key.
 
 ## Repository hygiene
 

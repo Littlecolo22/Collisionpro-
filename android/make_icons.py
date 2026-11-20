@@ -1,9 +1,19 @@
 # Draws the R&R Auto Express launcher icon at every density.
-from PIL import Image, ImageDraw, ImageFont
 import os
 BASE = os.path.dirname(os.path.abspath(__file__))
 FONT = '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf'
 SIZES = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
+if not os.path.isfile(FONT):
+    icons = [os.path.join(BASE, 'icon_512.png')] + [
+        os.path.join(BASE, 'res', 'mipmap-' + density, 'ic_launcher.png') for density in SIZES
+    ]
+    missing = [path for path in icons if not os.path.isfile(path)]
+    if missing:
+        raise RuntimeError('FreeSans is required to generate missing launcher icons')
+    print('FreeSans is unavailable; using the checked-in launcher icons')
+    raise SystemExit(0)
+
+from PIL import Image, ImageDraw, ImageFont
 
 def draw(n):
     S = 1024
