@@ -3,7 +3,7 @@ import { editCustomer } from './customer.js';
 
 // ---------- job tabs ----------
 export function jobTabs(id, cur) {
-  const t = [['estimate', 'Estimate'], ['3d', '3D picker'], ['vehicle', 'Vehicle & photos'], ['finish', 'PDF & share']];
+  const t = [['estimate', 'Estimate'], ['3d', 'Parts diagram'], ['vehicle', 'Vehicle & photos'], ['finish', 'PDF & share']];
   return `<div class="tabs">${t.map(([k, n]) => `<button class="${k === cur ? 'on' : ''}" data-href="#/job/${id}/${k}">${n}</button>`).join('')}</div>`;
 }
 export async function loadJob(id, force) {
@@ -212,7 +212,7 @@ view('settings', async () => {
 });
 
 view('help', async () => {
-  shell('Help', '', `<div class="page"><div class="card"><h3>Keyboard (desktop grid)</h3><p class="sm"><span class="kbd">/</span> search · <span class="kbd">N</span> new line · <span class="kbd">↑ ↓</span> move row · <span class="kbd">Enter</span> next row same column · <span class="kbd">Space</span> select row (when not editing) · <span class="kbd">Ctrl+A</span> select all · <span class="kbd">Ctrl+D</span> duplicate selected · <span class="kbd">Del</span> delete selected · <span class="kbd">Esc</span> clear selection · <span class="kbd">3</span> 3D picker · <span class="kbd">P</span> PDF</p></div>
+  shell('Help', '', `<div class="page"><div class="card"><h3>Keyboard (desktop grid)</h3><p class="sm"><span class="kbd">/</span> search · <span class="kbd">N</span> new line · <span class="kbd">↑ ↓</span> move row · <span class="kbd">Enter</span> next row same column · <span class="kbd">Space</span> select row (when not editing) · <span class="kbd">Ctrl+A</span> select all · <span class="kbd">Ctrl+D</span> duplicate selected · <span class="kbd">Del</span> delete selected · <span class="kbd">Esc</span> clear selection · <span class="kbd">3</span> parts diagram · <span class="kbd">P</span> PDF</p></div>
   <div class="card"><h3>Phone</h3><p class="sm">Swipe a grid row left for Duplicate / Delete. Long-press a row to select it and open the bulk-edit bar. In 3D: one finger rotates, two fingers zoom and pan, tap a part to price it, Go into to see its sub-parts.</p></div>
   <div class="card"><h3>Data</h3><p class="sm">The 3D car's parts start with no hours or prices: enter your own, or set standard hours per part in Settings. Parts from a connected catalog are marked with their source, e.g. <span class="tag live">Autodoc</span>.</p></div></div>`);
 });

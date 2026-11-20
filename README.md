@@ -8,6 +8,7 @@ Full project source snapshot for the R&R Auto Express CollisionPro estimating an
 
 - `src/` — Worker/backend modules and API logic
 - `public/` — web application source files
+- Estimate parts selection uses an interactive 2D vehicle diagram with assembly drill-down; the 3D model view remains optional.
 - `pages/dist/` — Pages deploy bundle, kept in sync with public assets
 - `pages/`, `pages_cust/` — Cloudflare Pages configurations
 - `schema.sql`, `migrations/` — D1 database schema and migrations

@@ -1,7 +1,7 @@
 import { S, api, toast, $, $$, esc, money, hrs, shell } from './app.js';
 import { jobTabs, loadJob, vehLabel } from './screens.js';
 import { createPicker, MARK_COLORS, STYLE_LABEL, quality3d, releaseShared3d } from './car3d.js';
-import { createDiagram } from './diagram2d.js';
+import { createAssemblyDiagram, createDiagram } from './diagram2d.js';
 
 const GROUP_ORDER = ['Front end', 'Hood & fenders', 'Lamps', 'Doors', 'Sides & quarters', 'Rear', 'Roof & glass', 'Interior', 'Mechanical & electrical', 'Wheels & suspension', 'Structural'];
 const PRICE_K = { OEM: 'price_oem', aftermarket: 'price_aftermarket', recycled: 'price_recycled', reconditioned: 'price_reconditioned' };
@@ -17,7 +17,8 @@ function lineMarks() {
   for (const l of S.job.lines || []) {
     const r = byKey[l.catalog_key]; if (!r?.mesh) continue;
     if (!marks[r.mesh] || (rank[l.operation] || 0) > (rank[marks[r.mesh]] || 0)) marks[r.mesh] = l.operation;
-    if (r.assembly && /^door_/.test(r.assembly) && /skin|shell/.test(r.mesh) && (!marks[r.assembly] || (rank[l.operation] || 0) > (rank[marks[r.assembly]] || 0))) marks[r.assembly] = l.operation;
+    const root = ({ front_bumper: 'fbumper_cover', rear_bumper: 'rbumper_cover', engine: 'engine' })[r.assembly] || (/^(door_|hood$|decklid$)/.test(r.assembly || '') ? r.assembly : null);
+    if (root && (!marks[root] || (rank[l.operation] || 0) > (rank[marks[root]] || 0))) marks[root] = l.operation;
   }
   return marks;
 }
@@ -31,13 +32,13 @@ window.CP.pickerView = async (id) => {
   const b = await loadJob(id, true);
   const m3d = b.model3d || { style: 'sedan', family: 'sedan', doors: 4 };
   const cat = await api(`/api/catalog?style=${family(m3d)}`);
-  P = { id, m3d, cat: (Array.isArray(cat) ? cat : []), sel: null, prov: S.settings.vin_parts_provider || 'sample', ad: { vehicle: null } };
+  P = { id, m3d, cat: (Array.isArray(cat) ? cat : []), sel: null, assembly: null, prov: S.settings.vin_parts_provider || 'sample', ad: { vehicle: null } };
   P.cat = P.cat.filter(doorOK);
   const v = b.vehicle || {}; const vd = (() => { try { return typeof v.vin_data === 'string' ? JSON.parse(v.vin_data) : v.vin_data || {}; } catch { return {}; } })();
   const styleTxt = [STYLE_LABEL[m3d.style], m3d.cab && m3d.cab + ' cab', m3d.bed && m3d.bed + ' bed', m3d.doors && m3d.doors + '-door', m3d.dims_source && 'real size'].filter(Boolean).join(' · ');
   shell(esc(b.job.number), esc(vehLabel(v)), jobTabs(id, '3d') + `<div class="page"><div class="v3wrap"><div class="v3" id="v3">
-   <div class="bar"><span class="seg"><button id="m2">2D<span class="lbl"> diagram</span></button><button id="m3">3D</button></span><button id="vm" title="Mirror left/right" hidden>⇄ L/R</button><span class="seg" id="vei"><button id="vx" class="on">Exterior</button><button id="vi">Interior</button></span><button id="vxr" title="See the inner structure">X-ray</button><button id="vex" title="Take the bumper apart">Explode</button><button id="vr" title="Reset view">⟲</button><span class="grow"></span><button id="vl" title="Parts list">☰<span class="lbl"> Parts list</span></button><div class="crumbs" id="crumbs" hidden><button id="vb" title="Back">←</button><span id="crumbl"></span></div></div>
-   <div class="d2" id="d2" hidden></div><div class="bulk2 hide" id="bulk2"></div><div class="info" id="vinfo"><b>${esc([v.year, v.make, v.model, v.trim].filter(Boolean).join(' ') || 'Vehicle')}</b><br><span class="mut" id="vstyle">${esc(styleTxt)} · closest built-in model</span><br><span id="td">${teardownInfo()}</span></div>
+   <div class="bar"><span class="seg"><button id="m2" class="on">Car<span class="lbl"> diagram</span></button><button id="m3">3D model</button></span><button id="vm" title="Mirror left/right" hidden>⇄ L/R</button><span class="seg" id="vei"><button id="vx" class="on">Exterior</button><button id="vi">Interior</button></span><button id="vxr" title="See the inner structure">X-ray</button><button id="vex" title="Take the bumper apart">Explode</button><button id="vr" title="Reset view">⟲</button><button id="asmback" hidden>← Whole car</button><span class="grow"></span><button id="vl" title="Parts list">☰<span class="lbl"> Parts list</span></button><div class="crumbs" id="crumbs" hidden><button id="vb" title="Back">←</button><span id="crumbl"></span></div></div>
+   <div class="d2" id="d2"></div><div class="asm2d" id="asm2d" hidden></div><div class="bulk2 hide" id="bulk2"></div><div class="info" id="vinfo"><b>${esc([v.year, v.make, v.model, v.trim].filter(Boolean).join(' ') || 'Vehicle')}</b><br><span class="mut" id="vstyle">${esc(styleTxt)} · interactive schematic</span><br><span id="td">${teardownInfo()}</span></div>
    <div class="legend">${[['replace', 'Replace'], ['repair', 'Repair'], ['refinish', 'Refinish'], ['blend', 'Blend'], ['r&i', 'R&I']].map(([k, n]) => `<span><i style="background:#${MARK_COLORS[k].toString(16).padStart(6, '0')}"></i>${n}</span>`).join('')}<span><i style="background:#2bd47a"></i>Selected</span></div></div>
    <div class="side card" id="side" style="padding:10px"><div class="row" style="margin-bottom:6px"><button class="sm on" id="tsam">Parts</button><button class="sm" id="tad">Parts catalog</button><span class="grow"></span></div>
    <div id="psam"><input id="pq" placeholder="Search parts"><div class="plist" id="pl"></div></div><div id="pad" hidden></div></div></div></div>
@@ -62,12 +63,13 @@ window.CP.pickerView = async (id) => {
   P.multi = new Set();
   const dg = createDiagram($('#d2'), { has: hasPart, names: short, onTap: tap2d, onLong: long2d });
   P.dg = dg;
-  $('#d2').hidden = false; dg.build(m3d, { color: v.color }); dg.setMarks(lineMarks());
-  const pref = localStorage.getItem('cp_view');
+  P.asmDiagram = createAssemblyDiagram($('#asm2d'), { onTap: (mesh) => openPart(mesh, P.cat.find((r) => r.mesh === mesh)?.assembly) });
+  dg.build(m3d, { color: v.color }); dg.setMarks(lineMarks());
   $('#m3').hidden = quality3d() === '2d'; // "2D only" chosen for this phone
-  setView(quality3d() === '2d' ? '2d' : pref || (matchMedia('(max-width: 820px),(max-height:500px)').matches ? '2d' : '3d'));
+  setView('2d');
   $('#m2').onclick = () => setView('2d');
   $('#m3').onclick = () => setView('3d');
+  $('#asmback').onclick = closeAssembly;
   $('#vm').onclick = mirrorSel;
   // exact glTF hook: shop upload first, then the licensed library URL.
   // Keep this async lookup scoped to the picker instance that started it: users
@@ -135,16 +137,41 @@ function goInto(asm, from) {
   P.back = from || 'exterior';
   P.pk.drillInto(asm, rows.map((r) => ({ key: r.key, mesh: r.mesh, name: r.name, short: r.name.split(',')[0] })), title);
 }
+function assemblyTitle(asm) {
+  return ({ front_bumper: 'Front bumper', rear_bumper: 'Rear bumper', engine: 'Engine & cooling', hood: 'Hood', decklid: 'Trunk / liftgate', door_lf: 'Front door, left', door_rf: 'Front door, right', door_lr: 'Rear door, left', door_rr: 'Rear door, right', interior: 'Interior' })[asm] || asm.replace(/_/g, ' ');
+}
+function openAssembly(asm) {
+  const rows = asmRows(asm).filter((r) => r.mesh);
+  if (!rows.length) { toast('No parts are listed for this assembly', true); return; }
+  closeSheet();
+  P.assembly = asm;
+  P.asmDiagram.setItems(rows, lineMarks(), null, assemblyTitle(asm));
+  $('#d2').hidden = true;
+  $('#asm2d').hidden = false;
+  $('#asmback').hidden = false;
+  $('#v3').classList.add('hasassembly');
+}
+function closeAssembly() {
+  if (!P?.assembly) return;
+  closeSheet();
+  P.assembly = null;
+  P.asmDiagram.setItems([], lineMarks());
+  $('#asm2d').hidden = true;
+  $('#asmback').hidden = true;
+  $('#v3').classList.remove('hasassembly');
+  setView('2d');
+  P.dg.refit();
+}
 function sheetInset() { if (!P?.pk) return; const sh = $('#sheet'), cv = $('#v3'); if (!sh || !cv || sh.classList.contains('hide') || P.view !== '3d') { P.pk.setInset(0); return; } const a = cv.getBoundingClientRect(), b = sh.getBoundingClientRect(); if (b.left > a.left + a.width * 0.3) P.pk.setInset(0, Math.max(0, a.right - b.left)); else P.pk.setInset(Math.max(0, a.bottom - b.top)); }
-function closeSheet() { $('#sheet')?.classList.add('hide'); P?.pk?.setInset(0); P && (P.sel = null); P?.pk?.select(null); P?.dg?.select(null); $$('#pl .p.hl').forEach((x) => x.classList.remove('hl')); }
+function closeSheet() { $('#sheet')?.classList.add('hide'); P?.pk?.setInset(0); P && (P.sel = null); P?.pk?.select(null); P?.dg?.select(null); P?.asmDiagram?.select(null); $$('#pl .p.hl').forEach((x) => x.classList.remove('hl')); }
 
 function openPart(mesh, assembly, onlyKey) {
-  P.sel = mesh; P.dg?.select(mesh); if (P.view === '3d') P.pk.select(mesh);
+  P.sel = mesh; P.dg?.select(mesh); P.asmDiagram?.select(mesh); if (P.view === '3d') P.pk.select(mesh);
   $$('#pl .p').forEach((x) => x.classList.toggle('hl', x.dataset.mesh === mesh));
   const hl = $(`#pl .p[data-mesh="${CSS.escape(mesh || '')}"]`); if (hl) { const pl = $('#pl'); const t = hl.offsetTop - pl.offsetTop; if (t < pl.scrollTop || t > pl.scrollTop + pl.clientHeight - hl.offsetHeight) pl.scrollTop = Math.max(0, t - pl.clientHeight / 2); }
   let rows = onlyKey ? P.cat.filter((r) => r.key === onlyKey) : rowsFor(mesh);
   const asm = assembly || P.cat.find((r) => r.mesh === mesh)?.assembly || (/^door_[lr][fr]$/.test(mesh) ? mesh : null);
-  const canDrill = asm && asmRows(asm).filter((r) => r.mesh).length > 1 && (P.view === '2d' || P.pk.kind === 'car');
+  const canDrill = asm && P.assembly !== asm && asmRows(asm).filter((r) => r.mesh).length > 1 && (P.view === '2d' || P.pk.kind === 'car');
   const canIso = P.view === '3d' && P.pk.kind !== 'isolate' && P.pk.canIsolate(mesh);
   if (!rows.length && /^door_[lr][fr]$/.test(mesh)) rows = P.cat.filter((r) => r.mesh === mesh + '_skin' || r.mesh === mesh + '_shell');
   const sh = $('#sheet');
@@ -155,7 +182,12 @@ function openPart(mesh, assembly, onlyKey) {
   <p class="sm mut" style="margin-top:8px">Enter your hours and price, or pick the part from your parts catalog. Set standard hours for each part in Settings.</p>`;
   sh.classList.add('pk'); sh.classList.remove('hide'); sh.scrollTop = 0; requestAnimationFrame(sheetInset);
   $('#sx').onclick = closeSheet;
-  if (canDrill) $('#gi').onclick = async () => { closeSheet(); if (P.view === '2d') setView('3d'); if (!(await ensure3d())) return; if (asm === 'front_bumper' || asm === 'rear_bumper') toggleExplode(asm); else goInto(asm, P.pk.mode); };
+  if (canDrill) $('#gi').onclick = async () => {
+    closeSheet();
+    if (P.view === '2d') { openAssembly(asm); return; }
+    if (!(await ensure3d())) return;
+    if (asm === 'front_bumper' || asm === 'rear_bumper') toggleExplode(asm); else goInto(asm, P.pk.mode);
+  };
   $('#giso')?.addEventListener('click', () => isolatePart(mesh));
   bindDetails(sh);
   $('#cust')?.addEventListener('click', async () => { await api(`/api/jobs/${P.id}/lines`, { method: 'POST', body: { operation: 'repair', description: mesh.replace(/_/g, ' '), labor_type: 'body' } }); await afterAdd(); });
@@ -194,7 +226,7 @@ function bindForm(f) {
     await afterAdd();
   };
 }
-async function afterAdd(keep) { await loadJob(P.id, true); P.pk.setMarks(lineMarks()); P.dg?.setMarks(lineMarks()); $('#td').innerHTML = teardownInfo(); drawList(); if (keep) keep(); else closeSheet(); }
+async function afterAdd(keep) { await loadJob(P.id, true); P.pk.setMarks(lineMarks()); P.dg?.setMarks(lineMarks()); P.asmDiagram?.setMarks(lineMarks(), P.sel); $('#td').innerHTML = teardownInfo(); drawList(); if (keep) keep(); else closeSheet(); }
 
 // ---------- 3D navigation: X-ray, explode, isolate, breadcrumb, Back (history state) ----------
 const OPN = { replace: 'Replace', repair: 'Repair', refinish: 'Refinish', blend: 'Blend', 'r&i': 'R&I' };
@@ -328,10 +360,11 @@ function bindDetails(sh) {
 function setView(mode) {
   P.view = mode === '2d' ? '2d' : '3d'; localStorage.setItem('cp_view', P.view);
   const is2 = P.view === '2d';
-  $('#v3').classList.toggle('is2d', is2); $('#d2').hidden = !is2;
+  $('#v3').classList.toggle('is2d', is2); $('#d2').hidden = !is2 || !!P.assembly; $('#asm2d').hidden = !is2 || !P.assembly;
+  $('#asmback').hidden = !is2 || !P.assembly; $('#v3').classList.toggle('hasassembly', is2 && !!P.assembly);
   $('#m2').classList.toggle('on', is2); $('#m3').classList.toggle('on', !is2);
-  $('#vm').hidden = !is2; for (const k of ['#vei', '#vxr', '#vex']) $(k).hidden = is2;
-  if (is2) { if (P.pk.depth || P.pk.kind !== 'car') P.pk.setMode('exterior'); P.dg.select(P.sel); P.dg.setMulti(P.multi); requestAnimationFrame(() => P.dg.refit()); }
+  $('#vm').hidden = !is2 || !!P.assembly; for (const k of ['#vei', '#vxr', '#vex']) $(k).hidden = is2;
+  if (is2) { if (P.pk.depth || P.pk.kind !== 'car') P.pk.setMode('exterior'); P.dg.select(P.sel); P.dg.setMulti(P.multi); if (!P.assembly) requestAnimationFrame(() => P.dg.refit()); }
   else if (P.pk.stub) { const me = P; ensure3d().then((pk) => { if (!pk || P !== me || P.view !== '3d') return; if (P.sel) showOnModel(P.sel); pk.select(P.sel); pk.resize?.(); drawCrumbs(); }); }
   else { if (P.sel) showOnModel(P.sel); P.pk.select(P.sel); P.pk.resize?.(); }
   drawBulk(); drawCrumbs();

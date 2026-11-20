@@ -88,7 +88,7 @@ window.CP.estimateView = async (id) => {
   const supps = b.supplements || [];
   shell(esc(b.job.number), esc(vehLabel(b.vehicle)) + ' · ' + esc(b.customer?.name || ''), jobTabs(id, 'estimate') + `<div class="page"><div class="estlayout"><div>
   <div class="row estbar" style="margin-bottom:8px"><input id="gq" placeholder="Search lines  (/)" style="max-width:240px"><select id="gf" style="max-width:150px"><option value="">All ops</option>${OPS.map((o) => `<option>${o}</option>`).join('')}</select><select id="gs" style="max-width:150px"><option value="">All supplements</option><option value="0">Original</option>${supps.map((s) => `<option value="${s.number ?? s.supplement_no}">S${s.number ?? s.supplement_no}</option>`).join('')}</select>
-  <button id="add" class="sm">+ Line (N)</button><button id="sup" class="sm">+ Supplement</button><button class="sm" data-href="#/job/${id}/3d">3D (3)</button></div>
+  <button id="add" class="sm">+ Line (N)</button><button id="sup" class="sm">+ Supplement</button><button class="sm" data-href="#/job/${id}/3d">Car diagram</button></div>
   <div class="gridwrap" id="gw"><table class="eg" id="eg"><thead><tr>${COLS.map(([k, n, , cls, mh]) => `<th class="${cls} ${mh ? 'hide-m' : ''} ${k === 'line_no' ? 'stick' : ''}" data-k="${k}">${k === 'line_no' ? '<input type="checkbox" id="sa" aria-label="select all"> ' : ''}${n}</th>`).join('')}</tr></thead><tbody></tbody></table></div><div class="lcards" id="lc" hidden></div>
   <div class="bulk" id="bulk" hidden><b id="bc"></b><select id="bf"><option value="">Set field…</option><option>operation</option><option>labor_type</option><option>part_type</option><option>paint_stage</option><option>taxable</option><option>incl</option><option>judgment</option><option>not_included</option><option>markup_pct</option><option>discount_pct</option><option>betterment_pct</option></select><input id="bv" placeholder="value" style="width:90px"><button class="sm pri" id="bset">Set</button>
   <input id="bh" placeholder="±hrs" style="width:70px"><select id="bhk"><option>labor_hours</option><option>refinish_hours</option><option>teardown_hours</option></select><button class="sm" id="badd">Add hrs</button>
@@ -129,11 +129,11 @@ function drawRows() {
   $('#gw').hidden = mob; $('#lc').hidden = !mob;
   if (mob) {
     const all = L.length && L.every((l) => S.sel.has(l.id));
-    $('#lc').innerHTML = (L.length ? `<label class="lcsa"><input type="checkbox" id="sa2" ${all ? 'checked' : ''}> Select all <span class="mut">· ${L.length} ${L.length === 1 ? 'line' : 'lines'} · tap a line to edit</span></label>` : '') + (L.map(lineCard).join('') || `<p class="mut" style="padding:14px">No lines. Add parts from the 3D picker or tap + Line.</p>`);
+    $('#lc').innerHTML = (L.length ? `<label class="lcsa"><input type="checkbox" id="sa2" ${all ? 'checked' : ''}> Select all <span class="mut">· ${L.length} ${L.length === 1 ? 'line' : 'lines'} · tap a line to edit</span></label>` : '') + (L.map(lineCard).join('') || `<p class="mut" style="padding:14px">No lines. Add parts from the car diagram or tap + Line.</p>`);
     $('#eg tbody').innerHTML = '';
   } else {
     $('#lc').innerHTML = '';
-    $('#eg tbody').innerHTML = L.map((l) => `<tr data-id="${l.id}" class="${S.sel.has(l.id) ? 'sel' : ''}">${COLS.map((c) => cell(l, c)).join('')}</tr>`).join('') || `<tr><td colspan="${COLS.length}" style="padding:14px" class="mut">No lines. Add parts from the 3D picker or press N.</td></tr>`;
+    $('#eg tbody').innerHTML = L.map((l) => `<tr data-id="${l.id}" class="${S.sel.has(l.id) ? 'sel' : ''}">${COLS.map((c) => cell(l, c)).join('')}</tr>`).join('') || `<tr><td colspan="${COLS.length}" style="padding:14px" class="mut">No lines. Add parts from the car diagram or press N.</td></tr>`;
   }
   updBulk();
 }
