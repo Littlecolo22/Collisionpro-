@@ -39,6 +39,12 @@ The project checks JavaScript syntax, local module paths, and source-to-Pages as
 2. Install Wrangler if needed: `npm install -g wrangler`.
 3. Start local Worker development using the project Wrangler configuration and follow `BUILD_NOTES.md` for D1 setup.
 
+### Deploy the website to Cloudflare Pages
+
+The Cloudflare Pages project should use the repository root as its root directory. The checked-in root `wrangler.toml` identifies the Pages build output (`pages/dist`) and D1/AI bindings. The current build command `npm run build && npm test` is supported.
+
+For Git-connected Pages deployments, configure required secrets under the Pages project's Settings → Variables and Secrets. For a CLI deployment, build first with `npm run build`, then deploy `pages/dist` to the `collisionpro` Pages project.
+
 ### Build/synchronize Cloudflare Pages assets
 
 ```bash
@@ -46,11 +52,11 @@ npm run pages:build
 npm run pages:sync-check
 ```
 
-Review `pages/wrangler.toml` and the deployment notes before publishing. Set production credentials as Cloudflare secrets, not in source files.
+Set production credentials as Cloudflare secrets, not in source files. `wrangler.worker.toml` is the separate configuration for direct Workers deployments.
 
 ### Android
 
-Android source is under `android/`. Review `android/build_apk.sh` and Android build notes. A personal signing keystore is required for release/update continuity; keep it outside the repository. This archive does **not** contain a built APK.
+Android source is under `android/`. Review `android/build_apk.sh` and Android build notes. A personal signing keystore is required for release/update continuity; keep it outside the repository. No built APK is included yet; to host the app download on Pages, add the signed APK to the site's static assets and link to it.
 
 ## Repository hygiene
 

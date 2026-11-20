@@ -7,6 +7,8 @@
     "pdf-lib": "^1.17.1"
   },
   "scripts": {
+    "build": "npm run pages:build",
+    "test": "npm run check",
     "check": "node tools/static-check.mjs && node tools/check-local-imports.mjs && node tools/check-pages-sync.mjs",
     "pages:build": "bash ./build_pages.sh",
     "pages:sync-check": "node tools/check-pages-sync.mjs"
