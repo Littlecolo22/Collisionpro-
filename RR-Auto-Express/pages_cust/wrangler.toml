@@ -1,0 +1,12 @@
+name = "collisionpro-mine"
+main = "./dist/_worker.js"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+run_worker_first = true
+[[d1_databases]]
+binding = "DB"
+database_name = "collisionpro"
+database_id = "fe051cca-9c65-430a-8401-99a92171a130"

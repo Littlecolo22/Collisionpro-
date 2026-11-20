@@ -1,0 +1,2 @@
+ALTER TABLE jobs ADD COLUMN portal_viewed_at TEXT;
+ALTER TABLE jobs ADD COLUMN portal_off INTEGER DEFAULT 0;

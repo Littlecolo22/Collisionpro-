@@ -1,0 +1,24 @@
+name = "collisionpro"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/s/*", "/p/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "collisionpro"
+database_id = "LOCAL"
+
+[ai]
+binding = "AI"
+
+[triggers]
+crons = ["15 11 * * *"]
+
+[observability]
+enabled = true

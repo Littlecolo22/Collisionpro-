@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><style>html,body{margin:0;background:#111;height:100%}#v3{position:relative;width:100vw;height:100vh}</style>
+<script type="importmap">{"imports":{"three":"/public/vendor/three.module.min.js","three/addons/":"/public/vendor/addons/"}}</script>
+<script src="/wip/cars.js"></script></head><body><div id=v3></div>
+<script type=module>
+import * as THREE from '/public/vendor/three.module.min.js';
+const q = new URLSearchParams(location.search);
+const orig = THREE.WebGLRenderer.prototype.render; window.__stats = {};
+THREE.WebGLRenderer.prototype.render = function (s, c) { const t = performance.now(); orig.call(this, s, c); window.__stats = { calls: this.info.render.calls, tris: this.info.render.triangles, ms: performance.now() - t, geos: this.info.memory.geometries, tex: this.info.memory.textures }; window.__r = this; if (s.isScene) window.__scene = s; };
+const { createPicker } = await import('/public/car3d.js' + (q.get('v') ? '?v=' + q.get('v') : ''));
+const car = window.CARS[q.get('car') || 'camry'];
+const pk = createPicker(document.getElementById('v3'), { onPick: (p) => { window.__pick = p; } });
+window.pk = pk;
+pk.build(car.m3d, car.info);
+window.__ready = true;
+</script></body></html>

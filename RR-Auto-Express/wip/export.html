@@ -1,0 +1,51 @@
+<!doctype html><html><head><meta charset=utf-8>
+<script type="importmap">{"imports":{"three":"/public/vendor/three.module.min.js","three/addons/":"/public/vendor/addons/"}}</script>
+<script src="/wip/cars.js"></script></head><body>
+<script type=module>
+// Standalone GLB/glTF export of one vehicle: high-res lofted surfaces (res 2-3), nothing merged, every part a
+// named node, materials shared and named by role. Our own geometry and textures only.
+import * as THREE from '/public/vendor/three.module.min.js';
+import { GLTFExporter } from '/wip/GLTFExporter.js';
+import { specFor, paintHex } from '/public/car3d.js';
+import { buildExterior, mats } from '/public/carbody.js';
+const ROLE = (m, M0) => m.name;
+function matKey(m) { const h = (c) => (c ? c.getHex() : -1); return [m.type, h(m.color), h(m.emissive), m.emissiveIntensity, m.metalness, m.roughness, m.clearcoat, m.opacity, m.transparent, m.map && m.map.uuid, m.emissiveMap && m.emissiveMap.uuid].join('|'); }
+window.exportCar = async (key, res, binary) => {
+  const car = window.CARS[key];
+  const spec = specFor({ ...car.m3d, make: car.info.make, model: car.info.model, year: car.info.year });
+  spec.res = res; spec.compact = false;
+  const paint = paintHex(car.info.color);
+  const M0 = mats(paint, spec.look), M = {};
+  for (const k of Object.keys(M0)) M[k] = typeof M0[k] === 'function' ? (...a) => { const m = M0[k](...a); if (m && m.isMaterial && !m.name) m.name = k + (a.length && typeof a[0] === 'string' ? '_' + a[0] : ''); return m; } : M0[k];
+  const ext = buildExterior(spec, M);
+  const root = new THREE.Group(); root.name = (car.info.make + '_' + car.info.model).replace(/[^A-Za-z0-9]+/g, '_') + '_RR_generic';
+  root.add(ext); ext.name = 'body';
+  // name every node: part groups keep their part id; meshes get part__piece_index; deco gets its own name
+  const used = {};
+  const uniq = (n) => { used[n] = (used[n] || 0) + 1; return used[n] > 1 ? n + '_' + used[n] : n; };
+  ext.traverse((o) => {
+    if (o === ext) return;
+    let part = null; for (let q = o; q && q !== ext; q = q.parent) if (q.userData.part) { part = q.userData.part; break; }
+    if (o.userData.part) { o.name = uniq(o.userData.part); return; }
+    const base = (o.name && o.name !== 'iso' ? o.name : (o.isMesh ? (o.userData.recipe !== undefined ? 'panel' : 'detail') : 'group'));
+    o.name = uniq(part ? part + '__' + base : (o.userData.cabin ? 'interior__' + base : 'trim__' + base));
+  });
+  // share + name materials by role
+  const pool = new Map(); const names = {};
+  ext.traverse((o) => { if (!o.isMesh) return; const k = matKey(o.material); if (!pool.has(k)) { const m = o.material; let n = m.name;
+    if (!n) { const t = o.name.split('__')[0]; n = m.emissiveMap ? 'lamp_' + t.replace(/_[lr]$/, '') : m.map ? 'textured_' + t.replace(/_[lr][fr]?$/, '') : (m.metalness > 0.8 && m.roughness < 0.2 ? 'chrome' : 'mat_' + t.replace(/_[lr][fr]?$/, '')); }
+    const REN = { paint: 'paint_body', gloss: 'black_gloss', black: 'black_satin_polymer', trim: 'black_trim', core: 'lamp_housing', well: 'wheel_well_liner', rubber: 'rubber_seal', brake: 'brake_disc_iron', plate: 'license_plate_blank', glass: 'glass_tinted', lamp: 'lamp_lens_clear', tail: 'lamp_lens_red', reflector: 'reflector_red', mat_mirror: 'mirror_glass', mat_wheel: 'wheel_alloy', chrome: 'chrome' };
+    n = REN[n] || n.replace(/^mat_interior.*/, 'interior_charcoal').replace(/^wheelFinish_/, 'wheel_alloy_').replace(/^tire_/, 'tire_rubber_').replace(/^textured_/, '').replace(/^caliper.*/, 'brake_caliper_red'); names[n] = (names[n] || 0) + 1; m.name = names[n] > 1 ? n + '_' + names[n] : n; pool.set(k, m); }
+    o.material = pool.get(k); });
+  // GLB has no bump maps: drop them so the exporter does not warn
+  for (const m of pool.values()) { if (m.bumpMap) m.bumpMap = null; }
+  const ex = new GLTFExporter();
+  const out = await ex.parseAsync(root, { binary, onlyVisible: false, maxTextureSize: 2048 });
+  let nodes = 0, meshes = 0, tris = 0; root.traverse((o) => { nodes++; if (o.isMesh) { meshes++; const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3; } });
+  const parts = []; ext.children.forEach((c) => { if (c.userData.part) parts.push(c.name); });
+  const stats = { nodes, meshes, tris: Math.round(tris), materials: [...pool.values()].map((m) => m.name).sort(), parts, L: spec.L, W: spec.W, roof: spec.roof };
+  if (binary) { const b = new Uint8Array(out); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return { b64: btoa(s), stats }; }
+  return { json: JSON.stringify(out), stats };
+};
+window.__ready = true;
+</script></body></html>
