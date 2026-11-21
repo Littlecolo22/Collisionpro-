@@ -1,4 +1,4 @@
-# 3D picker test: tap-to-add, details panel quick ops, X-ray, Explode, isolate, breadcrumb, Back + history back, frame rate
+# 3D picker test: tap-to-isolate/details, quick ops, X-ray, Explode, breadcrumb, Back + history back, frame rate
 # usage: python3 test/pw_3d.py BASE SESSION_FILE '{"sedan":1,"pickup":2,"minivan":3}' [shotdir]
 import time, json, sys, os
 from playwright.sync_api import sync_playwright
@@ -40,7 +40,7 @@ with sync_playwright() as p:
             if not pg.evaluate("!!window.__pk"):
                 ok(f"{name} {style} picker handle", False, 'no window.__S'); continue
             if pg.evaluate("!document.querySelector('#v3 canvas') || !document.querySelector('#v3 canvas').offsetParent") or pg.evaluate("document.querySelector('#d2') && !document.querySelector('#d2').hidden"): click('#m3'); time.sleep(1.2)
-            # 3D is built on demand when switching to it: wait for the real picker (not the 2D stand-in)
+            # Wait for the automatically opened 3D render (not the 2D stand-in).
             for _ in range(240):
                 if pg.evaluate("!!(window.__S.picker && !window.__S.picker.stub && !document.querySelector('#v3 .v3load'))"): break
                 time.sleep(0.25)
@@ -53,15 +53,13 @@ with sync_playwright() as p:
             # tap the hood -> sheet with details
             n0=nlines()
             okt=tappart('hood')
-            ok(f"{name} {style} tap hood opens details", okt and sheet_open() and pg.locator('#sheet .pdet').count()==1, str(st()))
+            ok(f"{name} {style} tap hood isolates part and opens details", okt and sheet_open() and pg.locator('#sheet .pdet').count()==1 and st()['kind']=='isolate', str(st()))
             if style=='sedan' and name=='phone': pg.screenshot(path=f"{SH}/{name}_{style}_details.png")
             # quick Repair adds a line
             pg.locator('#sheet .pdet [data-q="repair"]').click(); time.sleep(1.5)
             n1=nlines(); ok(f"{name} {style} quick Repair adds line", n1==n0+1, f"{n0}->{n1}")
-            # tap selected hood again -> isolate
-            if sheet_open(): pg.locator('#giso').click() if pg.locator('#giso').count() else tappart('hood')
-            time.sleep(1.0); s=st()
-            ok(f"{name} {style} isolate hood", s['kind']=='isolate' and s['depth']==1 and not pg.locator('#crumbs').is_hidden(), str(s))
+            s=st()
+            ok(f"{name} {style} first tap isolates hood", s['kind']=='isolate' and s['depth']==1 and not pg.locator('#crumbs').is_hidden(), str(s))
             if name=='phone': pg.screenshot(path=f"{SH}/{name}_{style}_isolate.png")
             # phone/browser back gesture -> back to car
             pg.go_back(); time.sleep(1.0); s=st()

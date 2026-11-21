@@ -65,7 +65,7 @@ window.CP.pickerView = async (id) => {
    <div id="psam"><p class="sm mut">Parts are filtered by body style and VIN-sized vehicle dimensions. The illustrations are reference drawings, not OEM diagrams; verify the exact trim and use Parts catalog for VIN-specific supplier results.</p><div id="assembly-cards" class="assembly-cards"></div><div class="row" id="assembly-filter" hidden><button class="sm" id="asmback">← All assemblies</button><b class="grow" id="assembly-title"></b></div><input id="pq" placeholder="Search ${esc([v.year, v.make, v.model].filter(Boolean).join(' ') || 'vehicle')} parts"><div class="plist" id="pl"></div></div><div id="pad" hidden></div></div></div></div>
    <div class="sheet hide" id="sheet"></div>`);
   if (S.picker) { try { S.picker.destroy(); } catch (e) { console.warn(e); } S.picker = null; } // never keep two 3D views alive
-  // The 3D car is only built when the user switches to 3D (see ensure3d). Until then this stand-in keeps its state.
+  // The 3D car is built on opening the picker in 3D or switching to 3D; this stand-in keeps state in 2D.
   P.opts3d = {
     hasPart: (id) => P.cat.some((r) => r.mesh === id),
     onPick: pick3d,
@@ -86,7 +86,7 @@ window.CP.pickerView = async (id) => {
   P.dg = dg;
   dg.build(m3d, { color: v.color }); dg.setMarks(lineMarks());
   $('#m3').hidden = quality3d() === '2d'; // "2D only" chosen for this phone
-  setView('2d');
+  setView(quality3d() === '2d' ? '2d' : '3d');
   $('#m2').onclick = () => setView('2d');
   $('#m3').onclick = () => setView('3d');
   $('#asmback').onclick = closeAssembly;
@@ -279,8 +279,7 @@ function rearish(r, mesh) { return r ? (r.assembly === 'rear_bumper' || r.grp ==
 function pick3d(p) {
   if (!p) { closeSheet(); return; }
   if (P.multi.size) return;
-  // tap the selected part again to see it on its own
-  if (P.sel === p.mesh && P.pk.kind !== 'isolate' && P.pk.canIsolate(p.mesh)) { isolatePart(p.mesh); return; }
+  if (P.pk.kind !== 'isolate' && P.pk.canIsolate(p.mesh)) { isolatePart(p.mesh); return; }
   openPart(p.mesh, p.assembly);
 }
 async function isolatePart(mesh) {
@@ -423,7 +422,7 @@ function stub3d() {
     async loadExact(url) { st.exact = url; return false; }, destroy() {} };
 }
 const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
-// Builds the 3D car the first time the user switches to 3D. The tab stays usable: a "Loading 3D…" card shows at once,
+// Builds the 3D car when the picker opens in 3D or the user switches to it. The tab stays usable: a "Loading 3D…" card shows at once,
 // the work is split so the screen can paint in between, and shaders compile in the background where the phone allows.
 async function ensure3d() {
   if (!P.pk.stub) return P.pk;

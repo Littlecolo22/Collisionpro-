@@ -1,4 +1,4 @@
-# Time-to-interactive for opening the parts tab and switching to the 3D picker, at phone size under CPU throttling.
+# Time-to-interactive for opening the parts tab with its automatic 3D render and switching to 2D, under CPU throttling.
 # usage: python3 test/pw_tti.py BASE SESSION_FILE '[26,39]' THROTTLE [outjson]
 import time, json, sys
 from playwright.sync_api import sync_playwright
@@ -27,7 +27,6 @@ with sync_playwright() as p:
     ctx = br.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2.625, has_touch=True, is_mobile=True)
     ctx.add_cookies([{"name": "cp_session", "value": sess, "url": B}])
     ctx.add_init_script(INIT)
-    ctx.add_init_script("try{localStorage.setItem('cp_view','2d')}catch(e){}")
     pg = ctx.new_page(); errs = []
     pg.on("pageerror", lambda e: errs.append(str(e)[:200]))
     cdp = ctx.new_cdp_session(pg)
@@ -37,10 +36,9 @@ with sync_playwright() as p:
         for j in JOBS:
             pg.evaluate(f"location.hash='#/job/{j}'"); time.sleep(3)
             t0 = pg.evaluate(f"(()=>{{const t=performance.now(); setTimeout(()=>location.hash='#/job/{j}/3d',0); return t;}})()")
-            a = pg.evaluate(WAIT, {'t0': t0, 'sel': '#m3', 'lim': 60000}); a.update(job=j, rep=rep, step='open parts tab'); res.append(a); print(json.dumps(a), flush=True)
-            t0 = pg.evaluate("(()=>{const t=performance.now(); setTimeout(()=>document.querySelector('#m3').click(),0); return t;})()")
-            a = pg.evaluate(WAIT, {'t0': t0, 'sel': None, 'lim': 60000}); a.update(job=j, rep=rep, step='switch to 3D'); res.append(a); print(json.dumps(a), flush=True)
-            pg.evaluate("document.querySelector('#m2')&&document.querySelector('#m2').click()"); time.sleep(1)
+            a = pg.evaluate(WAIT, {'t0': t0, 'sel': None, 'lim': 60000}); a.update(job=j, rep=rep, step='open parts with automatic 3D'); res.append(a); print(json.dumps(a), flush=True)
+            t0 = pg.evaluate("(()=>{const t=performance.now(); setTimeout(()=>document.querySelector('#m2').click(),0); return t;})()")
+            a = pg.evaluate(WAIT, {'t0': t0, 'sel': '#d2:not([hidden])', 'lim': 60000}); a.update(job=j, rep=rep, step='switch to 2D'); res.append(a); print(json.dumps(a), flush=True)
     json.dump({'throttle': THR, 'res': res, 'errors': errs}, open(OUT, 'w'), indent=1)
     br.close()
 print('errors', errs[:5])
