@@ -5,7 +5,7 @@
 - Backend additions: catalog.js model3dFrom() (9 detailed styles -> catalog family sedan/coupe/truck/suv), logic.js decodeVin adds cab/bed/wheelbase + model3d,
   r_jobs.js jobBundle.model3d, GET /api/models3d (shop-uploaded .glb keyed caption "year|make|model", year may be *), files accept .glb with kind=model3d.
 - src/partsapi.js: Autodoc Parts Catalog (RapidAPI) and PartsTech supplier quote adapters. Server-side only; keys are Worker secrets, local: .dev.vars (never committed).
-  PartsTech uses the shop's PARTSTECH_USER_ID/PARTSTECH_USER_KEY; optional PARTSTECH_PARTNER_ID/PARTSTECH_PARTNER_KEY are included only when supplied. Quote searches are not cached so supplier price/availability is fetched on every search; store lists and auth tokens are cached.
+  PartsTech requires the shop's PARTSTECH_USER_ID/PARTSTECH_USER_KEY and the PARTSTECH_PARTNER_ID/PARTSTECH_PARTNER_KEY issued by PartsTech. Quote searches are not cached so supplier price/availability is fetched on every search; store lists and auth tokens are cached.
   Setting vin_parts_provider: sample | autodoc | autodoc_mock | partstech_autodoc | partstech_mock. D1 cache table api_cache. Routes /api/parts/{status,test,search,vehicle,categories,articles,article/:id}.
   Endpoints used: /api/vin/decoder-v3|v1|v5/{vin}, /api/category/type-id/1/products-groups-variant-1/{vehicleId}/lang-id/4,
   /api/category/search-for-the-commodity-group-tree-by-description/..., /api/articles/list/type-id/1/vehicle-id/{v}/category-id/{c}/lang-id/4,

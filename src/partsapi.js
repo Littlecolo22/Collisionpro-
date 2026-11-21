@@ -169,16 +169,21 @@ function MOCK(kind, path, body) {
 
 // ---------- PartsTech adapter (US aftermarket: live supplier pricing and availability) ----------
 // Auth: POST /oauth/access with the shop's user ID and API key -> bearer JWT.
-// Partner credentials are included only when a PartsTech integration has supplied them.
+// The auth request requires both shop and integration-partner credentials.
 const PT = 'https://api.partstech.com';
 async function cacheGet(env, k, ttl) { await ensureCache(env); const r = await env.DB.prepare('SELECT body, created FROM api_cache WHERE k=?').bind(k).first(); return r && Math.floor(Date.now() / 1000) - r.created < ttl ? JSON.parse(r.body) : null; }
 async function cachePut(env, k, v) { await env.DB.prepare('INSERT OR REPLACE INTO api_cache (k, body, status, created) VALUES (?,?,200,?)').bind(k, JSON.stringify(v), Math.floor(Date.now() / 1000)).run(); }
-function ptReady(env) { return !!(env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY); }
+function ptReady(env) {
+  return !!(env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY && env.PARTSTECH_PARTNER_ID && env.PARTSTECH_PARTNER_KEY);
+}
 async function ptToken(env) {
   const hit = await cacheGet(env, 'pt:token', 3000); if (hit?.t) return hit.t;
-  if (!ptReady(env)) throw new ApiError('no_key', 'PartsTech: no user ID and API key saved yet.');
-  const credentials = { user: { id: env.PARTSTECH_USER_ID, key: env.PARTSTECH_USER_KEY } };
-  if (env.PARTSTECH_PARTNER_ID && env.PARTSTECH_PARTNER_KEY) credentials.partner = { id: env.PARTSTECH_PARTNER_ID, key: env.PARTSTECH_PARTNER_KEY };
+  if (!env.PARTSTECH_USER_ID || !env.PARTSTECH_USER_KEY) throw new ApiError('no_key', 'PartsTech: no user ID and API key saved yet.');
+  if (!env.PARTSTECH_PARTNER_ID || !env.PARTSTECH_PARTNER_KEY) throw new ApiError('no_key', 'PartsTech: integration partner ID and key are required. Request them from PartsTech.');
+  const credentials = {
+    user: { id: env.PARTSTECH_USER_ID, key: env.PARTSTECH_USER_KEY },
+    partner: { id: env.PARTSTECH_PARTNER_ID, key: env.PARTSTECH_PARTNER_KEY },
+  };
   const r = await fetch(PT + '/oauth/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ accessType: 'user', credentials }) }).catch(() => null);
   if (!r) throw new ApiError('network', 'PartsTech did not answer in time.');
   const d = await r.json().catch(() => ({}));
@@ -255,7 +260,7 @@ export function partsRoutes(R) {
   R.get('/api/parts/status', async (c) => {
     c.need('jobs.read');
     const p = await provider(c.env);
-    return json({ provider: p, key_set: !!c.env.RAPIDAPI_KEY, partstech_ready: ptReady(c.env), partstech_user_set: !!(c.env.PARTSTECH_USER_ID && c.env.PARTSTECH_USER_KEY), host: HOST, note: 'Autodoc is mainly a European aftermarket catalog; US coverage and OEM pricing may be limited.' });
+    return json({ provider: p, key_set: !!c.env.RAPIDAPI_KEY, partstech_ready: ptReady(c.env), partstech_user_set: !!(c.env.PARTSTECH_USER_ID && c.env.PARTSTECH_USER_KEY), partstech_partner_set: !!(c.env.PARTSTECH_PARTNER_ID && c.env.PARTSTECH_PARTNER_KEY), host: HOST, note: 'Autodoc is mainly a European aftermarket catalog; US coverage and OEM pricing may be limited.' });
   });
   // Test the stored key without spending much quota (cached language list)
   R.post('/api/parts/test', async (c) => {

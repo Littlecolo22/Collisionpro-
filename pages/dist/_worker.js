@@ -7924,11 +7924,11 @@ function registerMoney(R2) {
     const kvn = new Set(((await c.db.prepare("SELECT name, value FROM private_kv WHERE name IN ('sms_user','sms_pass','sms_device','sms_method')").all().catch(() => null))?.results || []).map((r) => r.name === "sms_method" ? "m_" + r.value : r.name));
     const smsMethodNow = kvn.has("m_device") ? "device" : kvn.has("m_manual") ? "manual" : kvn.has("m_gateway") || kvn.has("sms_user") && kvn.has("sms_pass") ? "gateway" : "manual";
     const smsOn = smsMethodNow === "device" ? kvn.has("sms_device") : smsMethodNow === "gateway" ? kvn.has("sms_user") && kvn.has("sms_pass") : false;
-    const partstechReady = !!(env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY);
+    const partstechReady = !!(env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY && env.PARTSTECH_PARTNER_ID && env.PARTSTECH_PARTNER_KEY);
     s.integrations = [
       { key: "ai", name: "AI damage detection + VIN / odometer reading", status: env.AI ? "connected (Cloudflare Workers AI)" : "not bound", real: !!env.AI },
       { key: "vin", name: "VIN decode (NHTSA vPIC)", status: "connected (free public API)", real: true },
-      { key: "vin_parts", name: "Parts catalog (PartsTech, Autodoc)", status: { partstech_autodoc: `PartsTech first for US VINs${partstechReady ? " (user credentials detected)" : " (username and API key not configured)"}, Autodoc backup${env.RAPIDAPI_KEY ? "" : " (no key)"}`, autodoc: env.RAPIDAPI_KEY ? "Autodoc live" : "Autodoc selected, no key stored", autodoc_mock: "Autodoc mock responses", partstech_mock: "PartsTech mock responses" }[s.vin_parts_provider] || "no catalog: parts are entered by hand", real: s.vin_parts_provider === "autodoc" && !!env.RAPIDAPI_KEY || s.vin_parts_provider === "partstech_autodoc" && (partstechReady || !!env.RAPIDAPI_KEY), needs: "PartsTech user ID and API key. Partner credentials are optional if PartsTech has issued them for the integration. Autodoc: free Basic plan subscription on RapidAPI (mainly European aftermarket)" },
+      { key: "vin_parts", name: "Parts catalog (PartsTech, Autodoc)", status: { partstech_autodoc: `PartsTech first for US VINs${partstechReady ? " (credentials detected)" : " (user and partner credentials required)"}, Autodoc backup${env.RAPIDAPI_KEY ? "" : " (no key)"}`, autodoc: env.RAPIDAPI_KEY ? "Autodoc live" : "Autodoc selected, no key stored", autodoc_mock: "Autodoc mock responses", partstech_mock: "PartsTech mock responses" }[s.vin_parts_provider] || "no catalog: parts are entered by hand", real: s.vin_parts_provider === "autodoc" && !!env.RAPIDAPI_KEY || s.vin_parts_provider === "partstech_autodoc" && (partstechReady || !!env.RAPIDAPI_KEY), needs: "PartsTech user ID, user API key, integration partner ID, and partner key. Autodoc: free Basic plan subscription on RapidAPI (mainly European aftermarket)" },
       { key: "estimating_db", name: "Estimating database & P-pages (CCC ONE / Mitchell / Audatex)", status: "placeholder: sample labor guide; EMS / BMS / CSV import + export work", real: false, needs: "Licensed CCC ONE, Mitchell Cloud Estimating or Audatex Qapter seat and their partner API agreement" },
       { key: "drp", name: "Insurer DRP networks (assignments, approvals, e-payments)", status: "placeholder: workflow tracked in-app; BMS export for submission", real: false, needs: "Insurer DRP agreement and a network connection (CCC Secure Share, Mitchell Connect, Audatex/Solera)" },
       { key: "parts_network", name: "Parts ordering network", status: "placeholder: sample quotes from editable price list; POs tracked in-app", real: false, needs: "PartsTrader, CollisionLink (OEC) or vendor API accounts" },
@@ -8905,14 +8905,17 @@ async function cachePut(env, k, v) {
   await env.DB.prepare("INSERT OR REPLACE INTO api_cache (k, body, status, created) VALUES (?,?,200,?)").bind(k, JSON.stringify(v), Math.floor(Date.now() / 1e3)).run();
 }
 function ptReady(env) {
-  return !!(env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY);
+  return !!(env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY && env.PARTSTECH_PARTNER_ID && env.PARTSTECH_PARTNER_KEY);
 }
 async function ptToken(env) {
   const hit = await cacheGet(env, "pt:token", 3e3);
   if (hit?.t) return hit.t;
-  if (!ptReady(env)) throw new ApiError("no_key", "PartsTech: no user ID and API key saved yet.");
-  const credentials = { user: { id: env.PARTSTECH_USER_ID, key: env.PARTSTECH_USER_KEY } };
-  if (env.PARTSTECH_PARTNER_ID && env.PARTSTECH_PARTNER_KEY) credentials.partner = { id: env.PARTSTECH_PARTNER_ID, key: env.PARTSTECH_PARTNER_KEY };
+  if (!env.PARTSTECH_USER_ID || !env.PARTSTECH_USER_KEY) throw new ApiError("no_key", "PartsTech: no user ID and API key saved yet.");
+  if (!env.PARTSTECH_PARTNER_ID || !env.PARTSTECH_PARTNER_KEY) throw new ApiError("no_key", "PartsTech: integration partner ID and key are required. Request them from PartsTech.");
+  const credentials = {
+    user: { id: env.PARTSTECH_USER_ID, key: env.PARTSTECH_USER_KEY },
+    partner: { id: env.PARTSTECH_PARTNER_ID, key: env.PARTSTECH_PARTNER_KEY }
+  };
   const r = await fetch(PT2 + "/oauth/access", { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(15e3), body: JSON.stringify({ accessType: "user", credentials }) }).catch(() => null);
   if (!r) throw new ApiError("network", "PartsTech did not answer in time.");
   const d = await r.json().catch(() => ({}));
@@ -9009,7 +9012,7 @@ function partsRoutes(R2) {
   R2.get("/api/parts/status", async (c) => {
     c.need("jobs.read");
     const p = await provider(c.env);
-    return json({ provider: p, key_set: !!c.env.RAPIDAPI_KEY, partstech_ready: ptReady(c.env), partstech_user_set: !!(c.env.PARTSTECH_USER_ID && c.env.PARTSTECH_USER_KEY), host: HOST, note: "Autodoc is mainly a European aftermarket catalog; US coverage and OEM pricing may be limited." });
+    return json({ provider: p, key_set: !!c.env.RAPIDAPI_KEY, partstech_ready: ptReady(c.env), partstech_user_set: !!(c.env.PARTSTECH_USER_ID && c.env.PARTSTECH_USER_KEY), partstech_partner_set: !!(c.env.PARTSTECH_PARTNER_ID && c.env.PARTSTECH_PARTNER_KEY), host: HOST, note: "Autodoc is mainly a European aftermarket catalog; US coverage and OEM pricing may be limited." });
   });
   R2.post("/api/parts/test", async (c) => {
     c.need("catalog.write");
