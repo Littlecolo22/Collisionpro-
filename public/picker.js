@@ -1,7 +1,7 @@
 import { S, api, toast, $, $$, esc, money, hrs, shell } from './app.js';
 import { jobTabs, loadJob, vehLabel } from './screens.js';
 import { createPicker, MARK_COLORS, STYLE_LABEL, quality3d, releaseShared3d } from './car3d.js';
-import { createAssemblyDiagram, createDiagram } from './diagram2d.js';
+import { createDiagram } from './diagram2d.js';
 
 const GROUP_ORDER = ['Front end', 'Hood & fenders', 'Lamps', 'Doors', 'Sides & quarters', 'Rear', 'Roof & glass', 'Interior', 'Mechanical & electrical', 'Wheels & suspension', 'Structural'];
 const PRICE_K = { OEM: 'price_oem', aftermarket: 'price_aftermarket', recycled: 'price_recycled', reconditioned: 'price_reconditioned' };
@@ -11,6 +11,27 @@ function family(m3d) { return m3d?.family || 'sedan'; }
 function rowsFor(mesh) { return P.cat.filter((r) => r.mesh === mesh); }
 function asmRows(asm) { return P.cat.filter((r) => r.assembly === asm); }
 function doorOK(r) { const d = P.m3d?.doors || 4; return d > 2 || !/^door_[lr]r/.test(r.assembly || r.mesh || ''); }
+function rearClosureName() {
+  const m = P.m3d || {};
+  if (m.style === 'pickup') return 'Tailgate';
+  if (m.style === 'van' || m.cargo) return 'Rear doors';
+  if (m.style === 'suv' || m.style === 'crossover' || m.style === 'hatchback' || m.style === 'wagon' || m.style === 'minivan') return 'Liftgate';
+  return 'Trunk';
+}
+function vehicleDetails(v, vd) {
+  const d = vd || {};
+  const chips = [];
+  const doors = Number(d.doors || P.m3d?.doors);
+  if (doors) chips.push(`${doors}-door`);
+  if (d.engine) chips.push(d.engine);
+  if (d.drive) chips.push(d.drive);
+  if (P.m3d?.cab) chips.push(`${P.m3d.cab} cab`);
+  if (P.m3d?.bed_length_in) chips.push(`${P.m3d.bed_length_in} in bed`);
+  else if (P.m3d?.bed) chips.push(`${P.m3d.bed} bed`);
+  if (d.transmission) chips.push(d.transmission);
+  if (Array.isArray(d.adas) && d.adas.length) chips.push(`${d.adas.length} ADAS systems listed`);
+  return chips.length ? `<div class="vehicle-fit">${chips.map((c) => `<span>${esc(c)}</span>`).join('')}</div>` : '';
+}
 function lineMarks() {
   const byKey = Object.fromEntries(P.cat.map((r) => [r.key, r]));
   const marks = {}; const rank = { replace: 5, repair: 4, refinish: 3, blend: 2, 'r&i': 1 };
@@ -36,19 +57,19 @@ window.CP.pickerView = async (id) => {
   P.cat = P.cat.filter(doorOK);
   const v = b.vehicle || {}; const vd = (() => { try { return typeof v.vin_data === 'string' ? JSON.parse(v.vin_data) : v.vin_data || {}; } catch { return {}; } })();
   const styleTxt = [STYLE_LABEL[m3d.style], m3d.cab && m3d.cab + ' cab', m3d.bed && m3d.bed + ' bed', m3d.doors && m3d.doors + '-door', m3d.dims_source && 'real size'].filter(Boolean).join(' · ');
-  shell(esc(b.job.number), esc(vehLabel(v)), jobTabs(id, '3d') + `<div class="page"><div class="v3wrap"><div class="v3" id="v3">
-   <div class="bar"><span class="seg"><button id="m2" class="on">Car<span class="lbl"> diagram</span></button><button id="m3">3D model</button></span><button id="vm" title="Mirror left/right" hidden>⇄ L/R</button><span class="seg" id="vei"><button id="vx" class="on">Exterior</button><button id="vi">Interior</button></span><button id="vxr" title="See the inner structure">X-ray</button><button id="vex" title="Take the bumper apart">Explode</button><button id="vr" title="Reset view">⟲</button><button id="asmback" hidden>← Whole car</button><span class="grow"></span><button id="vl" title="Parts list">☰<span class="lbl"> Parts list</span></button><div class="crumbs" id="crumbs" hidden><button id="vb" title="Back">←</button><span id="crumbl"></span></div></div>
-   <div class="d2" id="d2"></div><div class="asm2d" id="asm2d" hidden></div><div class="bulk2 hide" id="bulk2"></div><div class="info" id="vinfo"><b>${esc([v.year, v.make, v.model, v.trim].filter(Boolean).join(' ') || 'Vehicle')}</b><br><span class="mut" id="vstyle">${esc(styleTxt)} · interactive schematic</span><br><span id="td">${teardownInfo()}</span></div>
+  shell(esc(b.job.number), esc(vehLabel(v)), jobTabs(id, '3d') + `<div class="page"><div class="v3wrap list-only"><div class="v3" id="v3" hidden>
+   <div class="bar"><span class="seg"><button id="m2" class="on">Car<span class="lbl"> diagram</span></button><button id="m3" title="Illustrated vehicle view">Illustration</button></span><button id="vm" title="Mirror left/right" hidden>⇄ L/R</button><span class="seg" id="vei"><button id="vx" class="on">Exterior</button><button id="vi">Interior</button></span><button id="vxr" title="See the inner structure">X-ray</button><button id="vex" title="Take the bumper apart">Explode</button><button id="vr" title="Reset view">⟲</button><span class="grow"></span><button id="vl" title="Parts list">☰<span class="lbl"> Parts list</span></button><div class="crumbs" id="crumbs" hidden><button id="vb" title="Back">←</button><span id="crumbl"></span></div></div>
+   <div class="d2" id="d2" hidden></div><div class="bulk2 hide" id="bulk2"></div><div class="info" id="vinfo"><b>${esc([v.year, v.make, v.model, v.trim].filter(Boolean).join(' ') || 'Vehicle')}</b><br><span class="mut" id="vstyle">${esc(styleTxt)} · illustrated ${P.exact ? 'exact model' : 'vehicle model'}</span>${vehicleDetails(v, vd)}<br><span id="td">${teardownInfo()}</span></div>
    <div class="legend">${[['replace', 'Replace'], ['repair', 'Repair'], ['refinish', 'Refinish'], ['blend', 'Blend'], ['r&i', 'R&I']].map(([k, n]) => `<span><i style="background:#${MARK_COLORS[k].toString(16).padStart(6, '0')}"></i>${n}</span>`).join('')}<span><i style="background:#2bd47a"></i>Selected</span></div></div>
-   <div class="side card" id="side" style="padding:10px"><div class="row" style="margin-bottom:6px"><button class="sm on" id="tsam">Parts</button><button class="sm" id="tad">Parts catalog</button><span class="grow"></span></div>
-   <div id="psam"><input id="pq" placeholder="Search parts"><div class="plist" id="pl"></div></div><div id="pad" hidden></div></div></div></div>
+   <div class="side card" id="side" style="padding:10px"><div class="row" style="margin-bottom:6px"><button class="sm on" id="tsam">Parts list</button><button class="sm" id="tad">Parts catalog</button><span class="grow"></span></div>
+   <div id="psam"><p class="sm mut">Parts are filtered by body style and VIN-sized vehicle dimensions. The illustrations are reference drawings, not OEM diagrams; verify the exact trim and use Parts catalog for VIN-specific supplier results.</p><div id="assembly-cards" class="assembly-cards"></div><div class="row" id="assembly-filter" hidden><button class="sm" id="asmback">← All assemblies</button><b class="grow" id="assembly-title"></b></div><input id="pq" placeholder="Search ${esc([v.year, v.make, v.model].filter(Boolean).join(' ') || 'vehicle')} parts"><div class="plist" id="pl"></div></div><div id="pad" hidden></div></div></div></div>
    <div class="sheet hide" id="sheet"></div>`);
   if (S.picker) { try { S.picker.destroy(); } catch (e) { console.warn(e); } S.picker = null; } // never keep two 3D views alive
   // The 3D car is only built when the user switches to 3D (see ensure3d). Until then this stand-in keeps its state.
   P.opts3d = {
     hasPart: (id) => P.cat.some((r) => r.mesh === id),
     onPick: pick3d,
-    onMode: (m, x) => { $('#vx').classList.toggle('on', m === 'exterior'); $('#vi').classList.toggle('on', m === 'interior'); if (m === 'drill' || m === 'exploded') $('#vstyle').textContent = (m === 'exploded' ? 'Exploded: ' : 'Inside: ') + (x?.title || ''); else $('#vstyle').textContent = styleTxt + (P.exact ? ' · exact model' : ' · closest built-in model'); },
+    onMode: (m, x) => { $('#vx').classList.toggle('on', m === 'exterior'); $('#vi').classList.toggle('on', m === 'interior'); if (m === 'drill' || m === 'exploded') $('#vstyle').textContent = (m === 'exploded' ? 'Illustrated exploded parts: ' : 'Illustrated interior: ') + (x?.title || ''); else $('#vstyle').textContent = styleTxt + (P.exact ? ' · illustrated exact model' : ' · illustrated vehicle model'); },
     onNav: (n) => { drawCrumbs(n); schedSync(); },
     onLost: () => fall2d('The 3D view was paused because the phone needed its graphics memory. Showing the 2D diagram; tap 3D to try again.', true),
     onSlow: () => fall2d('3D is running too slowly on this phone, so the 2D diagram is showing. You can set Parts view to "2D only" in My account.'),
@@ -63,7 +84,6 @@ window.CP.pickerView = async (id) => {
   P.multi = new Set();
   const dg = createDiagram($('#d2'), { has: hasPart, names: short, onTap: tap2d, onLong: long2d });
   P.dg = dg;
-  P.asmDiagram = createAssemblyDiagram($('#asm2d'), { onTap: (mesh) => openPart(mesh, P.cat.find((r) => r.mesh === mesh)?.assembly) });
   dg.build(m3d, { color: v.color }); dg.setMarks(lineMarks());
   $('#m3').hidden = quality3d() === '2d'; // "2D only" chosen for this phone
   setView('2d');
@@ -91,7 +111,7 @@ window.CP.pickerView = async (id) => {
     if (url && await pickerSession.pk.loadExact(url)) {
       if (P !== pickerSession) return;
       P.exact = true;
-      $('#vstyle').textContent = styleTxt + ' · exact model';
+      $('#vstyle').textContent = styleTxt + ' · illustrated exact model';
       P.pk.setMarks(lineMarks());
     }
   })();
@@ -117,7 +137,11 @@ function drawList() {
   const q = ($('#pq')?.value || '').toLowerCase();
   const marks = lineMarks();
   const groups = {};
-  for (const r of P.cat) { if (q && !(r.name + ' ' + r.key + ' ' + r.grp).toLowerCase().includes(q)) continue; (groups[r.grp] = groups[r.grp] || []).push(r); }
+  for (const r of P.cat) {
+    if (P.assembly && r.assembly !== P.assembly) continue;
+    if (q && !(r.name + ' ' + r.key + ' ' + r.grp).toLowerCase().includes(q)) continue;
+    (groups[r.grp] = groups[r.grp] || []).push(r);
+  }
   const order = [...GROUP_ORDER, ...Object.keys(groups).filter((g) => !GROUP_ORDER.includes(g))];
   $('#pl').innerHTML = order.filter((g) => groups[g]).map((g) => `<div class="grp">${esc(g)} <span class="mut">(${groups[g].length})</span></div>` + groups[g].map((r) => {
     const mk = marks[r.mesh]; const col = mk ? '#' + (MARK_COLORS[mk] || MARK_COLORS.other).toString(16).padStart(6, '0') : '';
@@ -129,6 +153,30 @@ function drawList() {
     if (P.view === '2d') { P.sel = mesh; openPart(mesh, r.assembly, key); if (P.dg.has(mesh)) $('#v3').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); return; }
     showOnModel(mesh, r.assembly); P.sel = mesh; openPart(mesh, r.assembly, key);
   });
+  drawAssemblyCards();
+}
+function drawAssemblyCards() {
+  const host = $('#assembly-cards');
+  if (!host) return;
+  if (P?.assembly) { host.hidden = true; host.innerHTML = ''; return; }
+  const preferred = [
+    ['front_bumper', 'Front bumper'],
+    ['hood', 'Hood'],
+    ['door_lf', 'Left front door'],
+    ['door_rf', 'Right front door'],
+    ['rear_bumper', 'Rear bumper'],
+    ['decklid', rearClosureName()],
+    ['engine', 'Engine & cooling'],
+  ];
+  const cards = preferred.map(([assembly, title]) => {
+    const rows = asmRows(assembly).filter((r) => r.mesh);
+    if (!rows.length) return '';
+    const names = rows.slice(0, 3).map((r) => esc(r.name)).join(' · ');
+    return `<button type="button" class="assembly-card" data-assembly="${esc(assembly)}"><b>${esc(title)}</b><span>${names}</span><small>${rows.length} catalog ${rows.length === 1 ? 'part' : 'parts'}</small></button>`;
+  }).join('');
+  host.hidden = false;
+  host.innerHTML = cards;
+  $$('.assembly-card', host).forEach((card) => card.onclick = () => openAssembly(card.dataset.assembly));
 }
 function goInto(asm, from) {
   const rows = asmRows(asm).filter((r) => r.mesh);
@@ -138,29 +186,25 @@ function goInto(asm, from) {
   P.pk.drillInto(asm, rows.map((r) => ({ key: r.key, mesh: r.mesh, name: r.name, short: r.name.split(',')[0] })), title);
 }
 function assemblyTitle(asm) {
-  return ({ front_bumper: 'Front bumper', rear_bumper: 'Rear bumper', engine: 'Engine & cooling', hood: 'Hood', decklid: 'Trunk / liftgate', door_lf: 'Front door, left', door_rf: 'Front door, right', door_lr: 'Rear door, left', door_rr: 'Rear door, right', interior: 'Interior' })[asm] || asm.replace(/_/g, ' ');
+  return ({ front_bumper: 'Front bumper', rear_bumper: 'Rear bumper', engine: 'Engine & cooling', hood: 'Hood', decklid: rearClosureName(), door_lf: 'Front door, left', door_rf: 'Front door, right', door_lr: 'Rear door, left', door_rr: 'Rear door, right', interior: 'Interior' })[asm] || asm.replace(/_/g, ' ');
 }
 function openAssembly(asm) {
   const rows = asmRows(asm).filter((r) => r.mesh);
   if (!rows.length) { toast('No parts are listed for this assembly', true); return; }
   closeSheet();
   P.assembly = asm;
-  P.asmDiagram.setItems(rows, lineMarks(), null, assemblyTitle(asm));
-  $('#d2').hidden = true;
-  $('#asm2d').hidden = false;
-  $('#asmback').hidden = false;
-  $('#v3').classList.add('hasassembly');
+  $('#assembly-cards').hidden = true;
+  $('#assembly-filter').hidden = false;
+  $('#assembly-title').textContent = assemblyTitle(asm);
+  drawList();
 }
 function closeAssembly() {
   if (!P?.assembly) return;
   closeSheet();
   P.assembly = null;
-  P.asmDiagram.setItems([], lineMarks());
-  $('#asm2d').hidden = true;
-  $('#asmback').hidden = true;
-  $('#v3').classList.remove('hasassembly');
-  setView('2d');
-  P.dg.refit();
+  $('#assembly-cards').hidden = false;
+  $('#assembly-filter').hidden = true;
+  drawList();
 }
 function sheetInset() { if (!P?.pk) return; const sh = $('#sheet'), cv = $('#v3'); if (!sh || !cv || sh.classList.contains('hide') || P.view !== '3d') { P.pk.setInset(0); return; } const a = cv.getBoundingClientRect(), b = sh.getBoundingClientRect(); if (b.left > a.left + a.width * 0.3) P.pk.setInset(0, Math.max(0, a.right - b.left)); else P.pk.setInset(Math.max(0, a.bottom - b.top)); }
 function closeSheet() { $('#sheet')?.classList.add('hide'); P?.pk?.setInset(0); P && (P.sel = null); P?.pk?.select(null); P?.dg?.select(null); P?.asmDiagram?.select(null); $$('#pl .p.hl').forEach((x) => x.classList.remove('hl')); }
@@ -226,7 +270,7 @@ function bindForm(f) {
     await afterAdd();
   };
 }
-async function afterAdd(keep) { await loadJob(P.id, true); P.pk.setMarks(lineMarks()); P.dg?.setMarks(lineMarks()); P.asmDiagram?.setMarks(lineMarks(), P.sel); $('#td').innerHTML = teardownInfo(); drawList(); if (keep) keep(); else closeSheet(); }
+async function afterAdd(keep) { await loadJob(P.id, true); P.pk.setMarks(lineMarks()); P.dg?.setMarks(lineMarks()); $('#td').innerHTML = teardownInfo(); drawList(); if (keep) keep(); else closeSheet(); }
 
 // ---------- 3D navigation: X-ray, explode, isolate, breadcrumb, Back (history state) ----------
 const OPN = { replace: 'Replace', repair: 'Repair', refinish: 'Refinish', blend: 'Blend', 'r&i': 'R&I' };
@@ -408,7 +452,7 @@ async function ensure3d() {
       ov.remove(); fall2d('3D could not start on this phone, so the 2D diagram is showing.'); return null;
     }
     S.picker = pk; P.pk = pk; ov.remove();
-    if (stand.st.exact) pk.loadExact(stand.st.exact).then((ok) => { if (ok && P === me) { P.exact = true; $('#vstyle').textContent = P.styleTxt + ' · exact model'; pk.setMarks(lineMarks()); } });
+    if (stand.st.exact) pk.loadExact(stand.st.exact).then((ok) => { if (ok && P === me) { P.exact = true; $('#vstyle').textContent = P.styleTxt + ' · illustrated exact model'; pk.setMarks(lineMarks()); } });
     return pk;
   })();
   try { return await P.loading3d; } finally { if (P === me) P.loading3d = null; ov.remove(); }

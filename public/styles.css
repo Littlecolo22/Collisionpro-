@@ -190,17 +190,14 @@ body{padding-left:var(--sal);padding-right:var(--sar)}
 .d2svg .d2title{font-size:.1px;fill:#9a9cab;font-weight:700;letter-spacing:.012px}
 .d2svg .d2note{font-size:.085px;fill:#6d6f7d}
 .d2svg .d2lab{font-size:.105px;fill:#fff;font-weight:600;paint-order:stroke;stroke:#000a;stroke-width:.025}
-.v3 .asm2d{position:absolute;inset:58px 0 0;z-index:2;overflow:auto;padding:12px;background:#121217}
-.asm-intro{display:flex;flex-direction:column;gap:4px;margin:0 0 12px;color:var(--mut);font-size:12px}.asm-intro b{color:var(--tx);font-size:15px}
-.asm-parts{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:9px}
-.asm-part{position:relative;display:flex;min-width:0;min-height:136px;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:10px 8px;background:#1a1b22;border:1px solid #ffffff20;border-radius:14px;color:var(--tx);cursor:pointer;text-align:center}
-.asm-part:hover,.asm-part.selected{border-color:var(--ok);background:#15251d}
-.asm-part-icon{display:flex;width:74px;height:54px;align-items:center;justify-content:center;color:#aab8c6}
-.asm-part-icon svg{width:64px;height:48px;fill:#333d48;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.asm-part-name{font-size:12px;font-weight:650;line-height:1.25;overflow-wrap:anywhere}
-.asm-part-foot{display:flex;align-items:center;gap:5px;color:var(--mut);font-size:10px;line-height:1.2}
-.asm-part-foot i{width:8px;height:8px;border-radius:3px}
-.v3.hasassembly .info,.v3.hasassembly .legend{display:none}
+.v3wrap.list-only{display:block}
+.v3wrap.list-only .v3{display:none}
+.v3wrap.list-only .side{height:auto;max-height:none}
+.assembly-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin:10px 0 12px}
+.assembly-card{min-height:112px;align-items:flex-start;justify-content:flex-start;flex-direction:column;border-radius:16px;padding:12px;text-align:left;white-space:normal}
+.assembly-card b{font-size:14px}.assembly-card span{color:var(--mut);font-size:11px;line-height:1.35}.assembly-card small{font-size:11px;color:var(--acc2)}
+.vehicle-fit{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.vehicle-fit span{border:1px solid #ffffff1f;border-radius:999px;padding:2px 7px;background:#ffffff0b;font-size:10px;color:#dfe6f0}
 .v3 .bulk2{position:absolute;left:10px;right:10px;bottom:10px;z-index:4;background:#141a2a;border:1px solid var(--acc);border-radius:20px;padding:8px 10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .v3 .bulk2.hide{display:none}.v3 .bulk2 .ops{display:flex;gap:4px;flex-wrap:wrap}.v3 .bulk2 button{min-height:40px}
 .v3.is2d .bulk2:not(.hide)~.info,.v3.is2d .bulk2:not(.hide)~.legend{display:none}
@@ -208,8 +205,6 @@ body{padding-left:var(--sal);padding-right:var(--sar)}
  .v3.is2d{height:calc(100vh - 168px - var(--sat) - var(--bnh));height:calc(100dvh - 168px - var(--sat) - var(--bnh));min-height:420px}
  .v3.is2d .legend{flex-direction:row;flex-wrap:wrap;left:8px;right:8px;justify-content:center;gap:2px 8px;bottom:6px}
  .v3.is2d .info{bottom:42px;max-width:calc(100% - 16px);font-size:11px;padding:5px 10px}
- .v3 .asm2d{inset:52px 0 0;padding:10px}
- .asm-parts{grid-template-columns:repeat(auto-fill,minmax(125px,1fr))}
  .v3 .bar button{padding-left:12px;padding-right:12px}
 }
 .v3 .bulk2 .ops button{min-width:0;flex:none;padding:0 12px}

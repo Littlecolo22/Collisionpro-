@@ -202,6 +202,100 @@ const MODEL_CACHE = new Map(); // key -> { ext, int }
 function disposeTree(root) { root?.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; for (const m of ms) { if (m.map && m.map !== honeycombTex()) m.map.dispose(); m.dispose(); } } }); }
 function cacheTake(k) { const v = MODEL_CACHE.get(k); if (v) MODEL_CACHE.delete(k); return v || null; }
 function cachePut(k, v) { MODEL_CACHE.delete(k); MODEL_CACHE.set(k, v); while (MODEL_CACHE.size > 2) { const [k0, v0] = MODEL_CACHE.entries().next().value; MODEL_CACHE.delete(k0); disposeTree(v0.ext); disposeTree(v0.int); } }
+function illustrate(root, outlines = false) {
+  const panels = /^(hood|roof|fender_[lr]|door_[lr][fr]$|quarter_[lr]|fbumper_cover|rbumper_cover|decklid|bedside_[lr]|liftgate|tailgate)$/;
+  const overlay = outlines ? new THREE.LineBasicMaterial({ color: 0x26323e, transparent: true, opacity: 0.78, depthWrite: false, toneMapped: false }) : null;
+  const edges = [];
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    let part = o;
+    while (part && !part.userData.part && part !== root) part = part.parent;
+    const id = part?.userData.part || '';
+    const convert = (source) => {
+      const m = source.clone();
+      const hadMap = !!(m.map || m.emissiveMap || m.bumpMap || m.normalMap);
+      m.map = m.emissiveMap = m.bumpMap = m.normalMap = m.roughnessMap = m.metalnessMap = m.alphaMap = null;
+      if (m.color && hadMap && /^grille/.test(id)) m.color.setHex(0x30363c);
+      else if (m.color && hadMap && /^headlamp/.test(id)) m.color.setHex(0xe6edf2);
+      else if (m.color && hadMap && /^tail_lamp/.test(id)) m.color.setHex(0xa32d36);
+      else if (m.color && hadMap && /glass/.test(id)) m.color.setHex(0x42596b);
+      m.roughness = 1;
+      m.metalness = 0;
+      if ('clearcoat' in m) { m.clearcoat = 0; m.clearcoatRoughness = 1; }
+      if ('envMapIntensity' in m) m.envMapIntensity = 0;
+      if (m.emissive) m.emissive.setHex(0x000000);
+      if ('emissiveIntensity' in m) m.emissiveIntensity = 0;
+      if (m.transparent) { m.transparent = false; m.opacity = 1; m.depthWrite = true; }
+      m.needsUpdate = true;
+      return m;
+    };
+    o.material = Array.isArray(o.material) ? o.material.map(convert) : convert(o.material);
+    if (outlines && panels.test(id) && o.geometry) {
+      if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+      if (o.geometry.boundingSphere?.radius > 0.35) {
+        const line = new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry, 24), overlay);
+        line.raycast = () => {};
+        line.renderOrder = 2;
+        o.add(line);
+        edges.push(line);
+      }
+    }
+  });
+  if (edges.length) root.userData.illustrationEdges = edges;
+}
+function componentArt(r, material) {
+  const id = `${r.mesh || ''} ${r.key || ''} ${r.name || ''}`.toLowerCase();
+  const g = new THREE.Group();
+  const add = (geo, mat, pos = [0, 0, 0]) => { const m = new THREE.Mesh(geo, mat); m.position.set(...pos); g.add(m); return m; };
+  const box = (w, h, d, mat, pos = [0, 0, 0], radius = 0.025) => add(roundBox(w, h, d, radius), mat, pos);
+  const dark = () => material('black'), metal = () => material('metal'), paint = () => material('paint');
+  if (/glass|windshield|back_glass/.test(id)) {
+    box(0.72, 0.46, 0.035, dark(), [0, 0, 0]);
+    box(0.66, 0.4, 0.012, material('glass'), [0, 0, 0.024]);
+  } else if (/headlamp|tail_lamp|fog_lamp|lamp|light/.test(id)) {
+    box(0.68, 0.3, 0.08, dark());
+    box(0.6, 0.22, 0.016, /tail|rear/.test(id) ? material('tail') : material('lamp'), [0, 0, 0.048], 0.06);
+    for (const x of [-0.19, 0, 0.19]) add(new THREE.SphereGeometry(0.055, 16, 8), material('chrome'), [x, 0, 0.065]);
+  } else if (/grille/.test(id)) {
+    box(0.76, 0.4, 0.055, dark());
+    for (let y = -2; y <= 2; y++) box(0.62, 0.025, 0.012, material('steel'), [0, y * 0.065, 0.035], 0.01);
+    box(0.12, 0.11, 0.02, material('chrome'), [0, 0, 0.054], 0.045);
+  } else if (/reinf|beam|frame_rail/.test(id)) {
+    box(0.9, 0.13, 0.12, metal(), [0, 0, 0]);
+    for (const x of [-0.34, 0.34]) box(0.16, 0.23, 0.1, metal(), [x, -0.02, 0.02]);
+    box(0.72, 0.025, 0.13, material('steel'), [0, 0.08, 0.01], 0.01);
+  } else if (/absorber|foam/.test(id)) {
+    box(0.78, 0.22, 0.15, material('foam'));
+    for (let x = -0.3; x <= 0.3; x += 0.1) box(0.018, 0.18, 0.155, material('steel'), [x, 0, 0.005], 0.006);
+  } else if (/sensor|radar|camera|module/.test(id)) {
+    box(0.3, 0.22, 0.12, dark());
+    add(new THREE.CylinderGeometry(0.065, 0.065, 0.025, 24), material('glass'), [0, 0, 0.075]).rotation.x = Math.PI / 2;
+    for (const x of [-0.11, 0.11]) box(0.035, 0.05, 0.04, metal(), [x, -0.12, 0]);
+  } else if (/wheel|tire/.test(id)) {
+    add(new THREE.TorusGeometry(0.24, 0.055, 14, 36), material('tire'));
+    add(new THREE.TorusGeometry(0.155, 0.018, 10, 32), material('chrome'), [0, 0, 0.01]);
+    add(new THREE.CylinderGeometry(0.035, 0.035, 0.035, 20), material('steel'), [0, 0, 0.015]).rotation.x = Math.PI / 2;
+    for (let i = 0; i < 5; i++) { const a = i * Math.PI * 2 / 5; box(0.025, 0.24, 0.018, material('steel'), [Math.sin(a) * 0.09, Math.cos(a) * 0.09, 0.02], 0.01).rotation.z = -a; }
+  } else if (/bracket|hinge|latch|retainer/.test(id)) {
+    box(0.48, 0.32, 0.045, metal());
+    for (const x of [-0.16, 0.16]) {
+      add(new THREE.CylinderGeometry(0.035, 0.035, 0.025, 16), material('chrome'), [x, 0, 0.035]).rotation.x = Math.PI / 2;
+      box(0.09, 0.09, 0.05, metal(), [x, 0.17, 0], 0.015);
+    }
+  } else if (/harness|wire/.test(id)) {
+    const wire = add(new THREE.TorusGeometry(0.17, 0.012, 8, 24, Math.PI * 1.6), material('wire'));
+    wire.rotation.z = Math.PI / 2;
+    for (const x of [-0.24, 0.24]) box(0.08, 0.06, 0.06, dark(), [x, 0, 0]);
+  } else {
+    const w = /hood/.test(id) ? 0.88 : /door|quarter|fender|roof|bed|liftgate|tailgate|bumper|panel|skin|shell/.test(id) ? 0.76 : 0.5;
+    box(w, 0.46, 0.045, paint(), [0, 0, 0]);
+    if (/hood|door|fender|quarter|roof|bed|liftgate|tailgate|bumper|panel|skin|shell/.test(id)) {
+      box(w * 0.76, 0.018, 0.012, material('chrome'), [0, 0.11, 0.03], 0.008);
+      box(w * 0.58, 0.012, 0.012, material('steel'), [0, -0.12, 0.03], 0.006);
+    }
+  }
+  return g;
+}
 export function isPhone() { return Math.min(screen.width || 9999, screen.height || 9999) < 820 || matchMedia('(pointer: coarse)').matches; }
 // 3D quality for this device: 'auto' (lite on phones), 'full', 'lite' or '2d' (3D off). Saved per device.
 export function quality3d() { const q = (() => { try { return localStorage.getItem('cp_3dq'); } catch { return null; } })(); return ['auto', 'full', 'lite', '2d'].includes(q) ? q : 'auto'; }
@@ -228,7 +322,7 @@ export function createPicker(container, opts = {}) {
   container.appendChild(renderer.domElement);
   const ac = new AbortController(); const sig = { signal: ac.signal }; // every canvas listener of this picker goes with it
   const scene = new THREE.Scene();
-  let BG_CAR = backdropTex({}); const BG_ISO = gradientTex('#d9dcdf', '#9a9fa5');
+  let BG_CAR = backdropTex({ bg: '#e8edf1', grad: 0.05, refl: 0 }); const BG_ISO = gradientTex('#d9dcdf', '#9a9fa5');
   scene.background = BG_CAR;
   scene.environment = SHARED.env;
   studioLights(scene);
@@ -294,14 +388,17 @@ export function createPicker(container, opts = {}) {
     const name = o.userData.part; const op = marks[name];
     for (const m of meshesOf(o)) {
       if (!m.material || m.userData.base === undefined) continue;
-      m.material.color.setHex(op ? (MARK_COLORS[op] || MARK_COLORS.other) : m.userData.base);
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
       const sel = name === selected && kind !== 'isolate';
-      if (m.material.emissive) m.material.emissive.setHex(sel ? 0x2bd47a : op ? (MARK_COLORS[op] || MARK_COLORS.other) : (m.userData.baseEm ?? 0));
-      if (m.material.emissiveIntensity !== undefined) m.material.emissiveIntensity = sel ? 0.55 : op ? 0.3 : (m.userData.baseEmI ?? m.material.emissiveIntensity);
+      mats.forEach((mat, i) => {
+        if (mat.color) mat.color.setHex(op ? (MARK_COLORS[op] || MARK_COLORS.other) : m.userData.baseColors?.[i] ?? m.userData.base);
+        if (mat.emissive) mat.emissive.setHex(sel ? 0x2bd47a : op ? (MARK_COLORS[op] || MARK_COLORS.other) : m.userData.baseEmColors?.[i] ?? m.userData.baseEm ?? 0);
+        if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = sel ? 0.55 : op ? 0.3 : m.userData.baseEmIs?.[i] ?? m.userData.baseEmI ?? mat.emissiveIntensity;
+      });
     }
   }
   function prep(root) {
-    root.traverse((m) => { if (m.isMesh && m.material) { if (!m.material.color) return; m.userData.base = m.material.color.getHex(); m.userData.baseEm = m.material.emissive ? m.material.emissive.getHex() : 0; m.userData.baseEmI = m.material.emissiveIntensity; } });
+    root.traverse((m) => { if (m.isMesh && m.material) { const mats = Array.isArray(m.material) ? m.material : [m.material]; const colors = mats.map((x) => x.color ? x.color.getHex() : null); if (!colors.some((x) => x !== null)) return; m.userData.baseColors = colors; m.userData.base = colors.find((x) => x !== null); m.userData.baseEmColors = mats.map((x) => x.emissive ? x.emissive.getHex() : 0); m.userData.baseEm = m.userData.baseEmColors[0]; m.userData.baseEmIs = mats.map((x) => x.emissiveIntensity); m.userData.baseEmI = m.userData.baseEmIs[0]; } });
   }
   function refreshAll() { for (const r of [ext, int, drill, struct, exg, iso]) eachPart(r, paintState); render(); }
   function camState() { return { pos: camera.position.clone(), target: controls.target.clone(), min: controls.minDistance, max: controls.maxDistance, polar: controls.maxPolarAngle }; }
@@ -351,7 +448,7 @@ export function createPicker(container, opts = {}) {
     modelKey = JSON.stringify([m3d || {}, info.make, info.model, info.year, paint]);
     const hit = cacheTake(modelKey); // the same car opened again: reuse its built parts (already on the GPU)
     if (hit) { ext = hit.ext; int = hit.int; M = hit.M; }
-    else { M = mats(paint, spec.look); ext = buildExterior(spec, M); int = buildInterior(spec, M); prep(ext); prep(int); }
+    else { M = mats(paint, spec.look); ext = buildExterior(spec, M); int = buildInterior(spec, M); illustrate(ext, true); illustrate(int); prep(ext); prep(int); }
     scene.add(ext); scene.add(int);
     const L = spec.L;
     // Default angle: front 3/4 from the side and height the vehicle's look asks for (front is +x, the right side is +z).
@@ -362,7 +459,7 @@ export function createPicker(container, opts = {}) {
       views.exterior = { pos: tgt.clone().addScaledVector(dir, L * 1.3), target: tgt, min: 1.5, max: 14 };
     } else views.exterior = { pos: new THREE.Vector3(L * 0.78, 1.75, L * 0.88), portrait: new THREE.Vector3(L * 0.95, spec.roof + 1.55, L * 0.62), target: new THREE.Vector3(0, spec.belt * 0.55, 0), min: 1.5, max: 14 };
     const stl = (spec.look && spec.look.studio) || {};
-    BG_CAR.dispose(); BG_CAR = backdropTex(stl); floorObj.setLook(stl);
+    BG_CAR.dispose(); BG_CAR = backdropTex({ bg: '#e8edf1', grad: 0.05, refl: 0 }); floorObj.setLook({ ...stl, bg: '#e8edf1', grad: 0.05, refl: 0 });
     const cabX = spec.L / 2 - (spec.cowl + 0.8);
     views.interior = { pos: new THREE.Vector3(cabX - 2.0, spec.roof + 1.6, 1.4), target: new THREE.Vector3(cabX, spec.belt - 0.15, 0), min: 0.6, max: 6 };
     floorObj.setFade(L * 0.5, L * 1.9); if (wshadow) { scene.remove(wshadow); floorObj.state.hide.splice(floorObj.state.hide.indexOf(wshadow), 1); } wshadow = wheelShadows(spec); scene.add(wshadow); floorObj.state.hide.push(wshadow);
@@ -381,7 +478,7 @@ export function createPicker(container, opts = {}) {
   function dispose(root) { root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; for (const m of ms) { if (m.map && m.map !== honeycombTex()) m.map.dispose(); m.dispose(); } } }); }
   function ghostExt(on) { if (ext && !exact) ghostify(ext, on); }
   function ensureStruct() {
-    if (!struct && spec && !exact) { struct = buildStructure(spec, opts.hasPart || null); prep(struct); struct.visible = false; scene.add(struct); }
+    if (!struct && spec && !exact) { struct = buildStructure(spec, opts.hasPart || null); illustrate(struct); prep(struct); struct.visible = false; scene.add(struct); }
     return struct;
   }
   // show the scene for the current level
@@ -449,8 +546,9 @@ export function createPicker(container, opts = {}) {
         else obj = new THREE.Mesh(lay.geo(), mkMat(lay.mat));
         obj.position.set(right ? -lay.p[0] : lay.p[0], lay.p[1], lay.p[2]);
       } else {
-        const big = /cover|skin|hood$|decklid$|liftgate|tailgate|panel/.test(r.mesh + ' ' + r.key);
-        obj = new THREE.Mesh(big ? roundBox(0.52, 0.2, 0.06, 0.02) : roundBox(0.22, 0.16, 0.1, 0.02), mkMat(/radar|sensor|camera|bracket|reinf|absorber|latch|hinge|strut/.test(r.mesh) ? 'metal' : /lamp/.test(r.mesh) ? 'lamp' : 'paint'));
+        const art = componentArt(r, mkMat);
+        art.scale.setScalar(0.65);
+        obj = new THREE.Group(); obj.add(art);
         const col = gi % cols, row = Math.floor(gi / cols); gi++;
         obj.position.set((col - (cols - 1) / 2) * 0.62, 0.35 - row * 0.42, 0);
       }
@@ -461,6 +559,7 @@ export function createPicker(container, opts = {}) {
       obj.add(lbl);
       drill.add(obj);
     }
+    illustrate(drill);
     prep(drill);
     scene.add(drill);
     views.drill = isDoor ? { pos: new THREE.Vector3(right ? -0.9 : 0.9, 0.55, right ? -2.3 : 2.3), target: new THREE.Vector3(0, 0.05, 0.15 * (right ? -1 : 1)), min: 0.6, max: 5 } : { pos: new THREE.Vector3(0.5, 0.4, 2.2 + cols * 0.25), target: new THREE.Vector3(0, 0, 0), min: 0.6, max: 6 };
@@ -473,6 +572,7 @@ export function createPicker(container, opts = {}) {
     if (kind === 'isolate') back(true);
     if (kind === 'exploded') back(true);
     const g = buildExploded(assembly, spec, opts.hasPart || null);
+    illustrate(g);
     prep(g);
     push({ kind: 'exploded', label: title || (assembly === 'front_bumper' ? 'Front bumper' : 'Rear bumper'), assembly });
     exg = g; scene.add(g);
@@ -498,7 +598,7 @@ export function createPicker(container, opts = {}) {
     look(ext); look(struct); look(exg); look(drill);
     if (!f && !exact && spec) {
       ensureStruct(); look(struct);
-      for (const a of ['front_bumper', 'rear_bumper']) { if (f) break; if (!cache[a]) cache[a] = buildExploded(a, spec, null); look(cache[a]); }
+      for (const a of ['front_bumper', 'rear_bumper']) { if (f) break; if (!cache[a]) { cache[a] = buildExploded(a, spec, null); illustrate(cache[a]); } look(cache[a]); }
     }
     return f;
   }
@@ -576,6 +676,7 @@ export function createPicker(container, opts = {}) {
       const b2 = new THREE.Box3().setFromObject(root); const ctr = b2.getCenter(new THREE.Vector3());
       root.position.x -= ctr.x; root.position.z -= ctr.z; root.position.y -= b2.min.y;
       root.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); if (o.name && /^[a-z0-9_]+$/.test(o.name)) o.userData.part = o.name; } });
+      illustrate(root, true);
       if (ext) { scene.remove(ext); dispose(ext); }
       ext = root; prep(ext); scene.add(ext); exact = true; setMode('exterior', true);
       opts.onBuilt && opts.onBuilt({ spec, exact: true });
@@ -619,9 +720,9 @@ export function createPicker(container, opts = {}) {
       const sp = specFor({ ...(m3d || {}), make: (m3d && m3d.make) || info.make, model: (m3d && m3d.model) || info.model, year: (m3d && m3d.year) || info.year });
       const pt = paintHex(info.color); const key = JSON.stringify([m3d || {}, info.make, info.model, info.year, pt]);
       if (!MODEL_CACHE.has(key)) {
-        const m = mats(pt, sp.look); const e = buildExterior(sp, m); await yieldNow(); if (destroyed) { disposeTree(e); return; }
+        const m = mats(pt, sp.look); const e = buildExterior(sp, m); illustrate(e, true); await yieldNow(); if (destroyed) { disposeTree(e); return; }
         prep(e); await yieldNow(); if (destroyed) { disposeTree(e); return; }
-        const i = buildInterior(sp, m); prep(i); await yieldNow(); if (destroyed) { disposeTree(e); disposeTree(i); return; }
+        const i = buildInterior(sp, m); illustrate(i); prep(i); await yieldNow(); if (destroyed) { disposeTree(e); disposeTree(i); return; }
         cachePut(key, { ext: e, int: i, M: m });
       }
       build(m3d, info);

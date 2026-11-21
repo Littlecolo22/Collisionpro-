@@ -3,7 +3,7 @@ import { editCustomer } from './customer.js';
 
 // ---------- job tabs ----------
 export function jobTabs(id, cur) {
-  const t = [['estimate', 'Estimate'], ['3d', 'Parts diagram'], ['vehicle', 'Vehicle & photos'], ['finish', 'PDF & share']];
+  const t = [['estimate', 'Estimate'], ['3d', 'Parts list'], ['vehicle', 'Vehicle & photos'], ['finish', 'PDF & share']];
   return `<div class="tabs">${t.map(([k, n]) => `<button class="${k === cur ? 'on' : ''}" data-href="#/job/${id}/${k}">${n}</button>`).join('')}</div>`;
 }
 export async function loadJob(id, force) {

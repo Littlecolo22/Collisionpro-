@@ -268,6 +268,7 @@ export function mats(paint, look = {}) {
     wire: () => std({ color: 0xe07b1a, roughness: 0.6 }),
     metal: () => std({ color: 0x8b939c, metalness: 0.6, roughness: 0.45 }),
     steel: () => std({ color: 0x9aa3ad, metalness: 0.75, roughness: 0.38 }),
+    foam: () => std({ color: 0xcac39c, roughness: 1 }),
     carpet: () => std({ color: 0x24272c, roughness: 1 }),
     airbag: () => std({ color: 0xe8e4da, roughness: 0.9 }),
     honey: () => { const t = honeycombTex().clone(); t.needsUpdate = true; t.repeat.set(9, 2.2); return std({ color: 0xffffff, map: t, roughness: 0.5, metalness: 0.2 }); },

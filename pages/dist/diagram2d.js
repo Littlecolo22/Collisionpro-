@@ -104,7 +104,6 @@ function geometry(m3d) {
     }
     P('fbumper_cover', 'paint', [[-W2 + 0.05, 0.31], [-W2, 0.22], [-W2 + 0.12, 0.04], [-W2 + 0.4, 0], [W2 - 0.4, 0], [W2 - 0.12, 0.04], [W2, 0.22], [W2 - 0.05, 0.31]], { lab: 1 });
     P('hood', 'paint', [[-W2 + 0.19, 0.31], [W2 - 0.19, 0.31], [W2 - 0.19, s.cowl - 0.07], [-W2 + 0.19, s.cowl - 0.07]], { lab: 1 });
-    P('engine', 'engine', [[-W * 0.23, 0.43], [W * 0.23, 0.43], [W * 0.19, s.cowl - 0.13], [-W * 0.19, s.cowl - 0.13]], { lab: 1, name: 'Engine' });
     P('cowl', 'black', rect(-W2 + 0.14, s.cowl - 0.07, W2 - 0.14, s.cowl + 0.03));
     P('windshield', 'glass', [[-W2 + 0.14, s.cowl + 0.03], [W2 - 0.14, s.cowl + 0.03], [W2 - 0.2, s.roofF], [-W2 + 0.2, s.roofF]], { lab: 1 });
     P('roof', 'paint', rect(-W2 + 0.2, s.roofF, W2 - 0.2, s.roofR), { lab: 1 });
@@ -387,48 +386,5 @@ export function createDiagram(container, { onTap, onLong, has, names } = {}) {
     get layout() { return kind; },
     get viewBox() { return vb && { ...vb }; },
     destroy() { ro.disconnect(); svg.remove(); },
-  };
-}
-
-const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
-function partIcon(item) {
-  const t = `${item.mesh} ${item.name}`.toLowerCase();
-  if (/engine|intake|alternator|starter|tensioner|radiator|condenser|cooling_fan/.test(t)) return '<svg viewBox="0 0 64 48"><path d="M10 15h8l5-7h20l5 7h6v25H10z"/><path d="M20 15v20m24-20v20M26 21h12v10H26z"/><circle cx="18" cy="21" r="2"/><circle cx="46" cy="21" r="2"/></svg>';
-  if (/door|hood|quarter|fender|decklid|liftgate|tailgate|skin|shell|bedside/.test(t)) return '<svg viewBox="0 0 64 48"><path d="M14 42V20L20 7h25l6 13v22z"/><path d="M21 11h22l4 10H17zM19 24h27v14H19z"/><path d="M40 30h4"/></svg>';
-  if (/bumper|reinforcement|absorber|bracket|valance|diffuser/.test(t)) return '<svg viewBox="0 0 64 48"><path d="M7 17q25-9 50 0l-3 20q-22 8-44 0z"/><path d="M13 21q19-6 38 0m-37 12q18 5 36 0M18 39v4m28-4v4"/></svg>';
-  if (/wheel|tire|strut|control_arm|tie_rod/.test(t)) return '<svg viewBox="0 0 64 48"><circle cx="32" cy="24" r="18"/><circle cx="32" cy="24" r="8"/><path d="M32 6v10m0 16v10M14 24h10m16 0h10M19 11l7 8m12 10 7 8M45 11l-7 8m-12 10-7 8"/></svg>';
-  if (/glass|window|windshield|mirror/.test(t)) return '<svg viewBox="0 0 64 48"><path d="M9 35 17 10h30l8 25z"/><path d="m18 30 4-15h20l5 15z"/></svg>';
-  if (/lamp|sensor|radar|camera|harness|motor|speaker|battery|module/.test(t)) return '<svg viewBox="0 0 64 48"><rect x="13" y="10" width="38" height="28" rx="5"/><path d="M20 17h24v14H20z"/><circle cx="32" cy="24" r="3"/></svg>';
-  return '<svg viewBox="0 0 64 48"><path d="M12 12h40v25H12z"/><path d="M18 18h28v13H18z"/><circle cx="18" cy="40" r="2"/><circle cx="46" cy="40" r="2"/></svg>';
-}
-
-export function createAssemblyDiagram(container, { onTap } = {}) {
-  let items = [], title = 'Assembly';
-  const click = (e) => {
-    const part = e.target.closest('[data-asm-part]');
-    if (part) onTap?.(part.dataset.asmPart);
-  };
-  container.addEventListener('click', click);
-
-  function render(marks = {}, selected = null) {
-    const cards = items.map((item) => {
-      const mark = marks[item.mesh];
-      const color = mark ? '#' + (MARK_COLORS[mark] || MARK_COLORS.other).toString(16).padStart(6, '0') : '';
-      return `<button type="button" class="asm-part${selected === item.mesh ? ' selected' : ''}" data-asm-part="${escapeHtml(item.mesh)}" aria-label="${escapeHtml(item.name)}">
-        <span class="asm-part-icon">${partIcon(item)}</span><span class="asm-part-name">${escapeHtml(item.name)}</span><span class="asm-part-foot">${color ? `<i style="background:${color}"></i>${escapeHtml(mark)}` : escapeHtml(item.grp || 'Vehicle part')}</span>
-      </button>`;
-    }).join('');
-    container.innerHTML = `<div class="asm-intro"><b>${escapeHtml(title)} · exploded parts</b><span>Tap a component to inspect or add it to the estimate. Schematic layout, not VIN-specific OEM art.</span></div>${cards ? `<div class="asm-parts">${cards}</div>` : '<p class="mut">No catalog parts in this assembly.</p>'}`;
-  }
-  return {
-    setItems(rows, marks = {}, selected = null, name = 'Assembly') {
-      const seen = new Set();
-      items = (rows || []).filter((item) => item.mesh && !seen.has(item.mesh) && seen.add(item.mesh));
-      title = name;
-      render(marks, selected);
-    },
-    setMarks(marks, selected = null) { render(marks || {}, selected); },
-    select(mesh) { container.querySelectorAll('[data-asm-part]').forEach((part) => part.classList.toggle('selected', part.dataset.asmPart === mesh)); },
-    destroy() { container.removeEventListener('click', click); container.replaceChildren(); },
   };
 }
