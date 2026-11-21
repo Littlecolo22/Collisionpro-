@@ -5,7 +5,7 @@ import * as THREE from './vendor/three.module.min.js';
 import { OrbitControls } from './vendor/addons/controls/OrbitControls.js';
 import { GLTFLoader } from './vendor/addons/loaders/GLTFLoader.js';
 import { buildExterior, mats, roundBox, contactShadowTex, honeycombTex, clamp } from './carbody.js';
-import { buildExploded, buildStructure, detailPart, ghostify } from './carparts.js';
+import { buildExploded, buildVehicleExploded, buildStructure, detailPart, ghostify } from './carparts.js';
 import { lookFor, applyLook } from './carlooks.js';
 import { studioEnvironment, studioLights, createFloor, backdropTex, wheelShadows, qualityGovernor, DETAIL_LAYER } from './carstudio.js';
 
@@ -15,7 +15,7 @@ export function paintHex(color) {
   const c = String(color || '').toLowerCase().trim();
   if (/^#?[0-9a-f]{6}$/.test(c)) return parseInt(c.replace('#', ''), 16);
   for (const k of Object.keys(PAINTS)) if (c.includes(k)) return PAINTS[k];
-  return 0x8fa3b8;
+  return PAINTS.silver;
 }
 
 // ---------- Body style dimensions (meters; d = distance from front bumper) ----------
@@ -387,15 +387,16 @@ export function createPicker(container, opts = {}) {
   // show the scene for the current level
   function show() {
     const car = kind === 'car';
-    if (ext) ext.visible = (car && mode === 'exterior') || kind === 'exploded';
+    const wholeExploded = kind === 'exploded' && cur.assembly === 'vehicle';
+    if (ext) ext.visible = (car && mode === 'exterior') || (kind === 'exploded' && !wholeExploded);
     if (int) int.visible = car && mode === 'interior';
     if (struct) struct.visible = car && mode === 'exterior' && xray;
     ghostExt((car && mode === 'exterior' && xray) || kind === 'exploded');
     if (drill) drill.visible = kind === 'drill';
     if (exg) exg.visible = kind === 'exploded';
     if (iso) iso.visible = kind === 'isolate';
-    ground.visible = shadow.visible = car || kind === 'exploded'; if (wshadow) wshadow.visible = car;
-    scene.background = kind === 'isolate' ? BG_ISO : BG_CAR;
+    ground.visible = shadow.visible = (car || kind === 'exploded') && !wholeExploded; if (wshadow) wshadow.visible = car && !wholeExploded;
+    scene.background = kind === 'isolate' ? BG_ISO : wholeExploded ? new THREE.Color(0xf8f8f6) : BG_CAR;
     refreshAll();
   }
   function nav() { opts.onNav && opts.onNav({ depth: stack.length, crumbs: [...stack.map((s) => s.cur.label), cur.label], kind, cur }); }
@@ -472,6 +473,20 @@ export function createPicker(container, opts = {}) {
   function explode(assembly, title) {
     if (kind === 'isolate') back(true);
     if (kind === 'exploded') back(true);
+    if (assembly === 'vehicle') {
+      const g = buildVehicleExploded(spec, ext, int);
+      prep(g);
+      push({ kind: 'exploded', label: title || 'Exploded vehicle', assembly: 'vehicle' });
+      exg = g;
+      scene.add(g);
+      show();
+      const box = new THREE.Box3().setFromObject(g);
+      const tgt = box.isEmpty() ? new THREE.Vector3(0, 0.8, 0) : box.getCenter(new THREE.Vector3());
+      applyCam(fitView({ pos: tgt.clone().add(new THREE.Vector3(spec.L * 0.72, spec.roof + 1.2, spec.L * 0.82)), target: tgt, min: 0.8, max: 12 }, box, 0.86, 0.78));
+      opts.onMode && opts.onMode('exploded', { assembly: 'vehicle', title: cur.label });
+      nav();
+      return;
+    }
     const g = buildExploded(assembly, spec, opts.hasPart || null);
     prep(g);
     push({ kind: 'exploded', label: title || (assembly === 'front_bumper' ? 'Front bumper' : 'Rear bumper'), assembly });

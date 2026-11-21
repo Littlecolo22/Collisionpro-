@@ -65,6 +65,115 @@ function cloneMesh(c, root) {
 
 // ---------- exploded assemblies ----------
 // Returns { group, items:[{mesh, obj}] } ; obj.userData.part = mesh id ; offsets already applied.
+export function buildVehicleExploded(s, ext, int) {
+  const g = new THREE.Group();
+  g.name = 'exploded_vehicle';
+
+  const clone = (source) => {
+    const obj = source.clone(true);
+    obj.traverse((node) => {
+      if (!node.isMesh || !node.material) return;
+      node.geometry = node.geometry.clone();
+      const multiple = Array.isArray(node.material);
+      const mats = multiple ? node.material : [node.material];
+      const copies = mats.map((mat) => {
+        const copy = mat.clone();
+        if (copy.map) copy.map = copy.map.clone();
+        return copy;
+      });
+      node.material = multiple ? copies : copies[0];
+    });
+    return obj;
+  };
+  const offsetFor = (name) => {
+    const side = /(?:^|_)(l|lf|lr)(?:_|$)/.exec(name)?.[1];
+    const z = side ? -1 : 1;
+    if (name === 'hood') return new THREE.Vector3(0, 0.85, 0);
+    if (/^(windshield|back_glass)$/.test(name)) return new THREE.Vector3(0, 1.15, 0);
+    if (name === 'roof') return new THREE.Vector3(0, 1.5, 0);
+    if (/^door_/.test(name)) return new THREE.Vector3(0, 0.24, z * 0.72);
+    if (/^(fender|quarter|mirror)_/.test(name)) return new THREE.Vector3(0, 0.28, z * 0.48);
+    if (/^fbumper_/.test(name) || /^(grille|grille_insert|grille_emblem|headlamp_|fog_lamp_)/.test(name)) return new THREE.Vector3(0.82, 0.12, 0);
+    if (/^rbumper_/.test(name) || /^tail_lamp_/.test(name)) return new THREE.Vector3(-0.82, 0.12, 0);
+    if (/^(decklid|liftgate|tailgate)$/.test(name)) return new THREE.Vector3(-0.1, 0.88, 0);
+    if (/^(tire|wheel)_/.test(name)) return new THREE.Vector3(0, -0.42, z * 0.55);
+    return null;
+  };
+
+  for (const child of ext.children) {
+    const name = child.userData?.part;
+    const copy = clone(child);
+    const offset = name && offsetFor(name);
+    if (offset) copy.position.add(offset);
+    g.add(copy);
+  }
+  for (const child of int?.children || []) {
+    const copy = clone(child);
+    copy.position.y -= 0.82;
+    g.add(copy);
+  }
+
+  const metal = new THREE.MeshStandardMaterial({ color: 0x92999f, metalness: 0.82, roughness: 0.3 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x24282c, metalness: 0.35, roughness: 0.46 });
+  const part = (name, obj, position, assembly = name) => {
+    obj.name = name;
+    obj.userData.part = name;
+    obj.userData.assembly = assembly;
+    obj.position.copy(position);
+    g.add(obj);
+  };
+
+  const engine = new THREE.Group();
+  engine.add(new THREE.Mesh(roundBox(0.68, 0.43, 0.56, 0.07), metal));
+  for (const side of [-1, 1]) {
+    const head = new THREE.Mesh(roundBox(0.52, 0.2, 0.13, 0.035), dark);
+    head.position.set(-0.04, 0.31, side * 0.2);
+    head.rotation.z = side * 0.18;
+    engine.add(head);
+  }
+  const pulley = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.035, 24), dark);
+  pulley.rotation.x = Math.PI / 2;
+  pulley.position.x = 0.34;
+  engine.add(pulley);
+  part('engine', engine, new THREE.Vector3(s.L / 2 - s.fo - 0.08, -0.82, 0));
+
+  const radiator = new THREE.Group();
+  radiator.add(new THREE.Mesh(roundBox(0.1, 0.42, 0.82, 0.025), metal));
+  const fanMat = new THREE.MeshStandardMaterial({ color: 0x33383d, metalness: 0.35, roughness: 0.45 });
+  for (const side of [-1, 1]) {
+    const fan = new THREE.Group();
+    fan.add(new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.025, 20), fanMat));
+    for (let i = 0; i < 5; i++) {
+      const blade = new THREE.Mesh(roundBox(0.06, 0.16, 0.015, 0.006), fanMat);
+      blade.position.x = 0.07;
+      blade.rotation.z = i * Math.PI * 0.4;
+      fan.add(blade);
+    }
+    fan.position.z = side * 0.23;
+    radiator.add(fan);
+  }
+  part('radiator', radiator, new THREE.Vector3(s.L / 2 - s.fo + 0.16, -0.82, 0));
+
+  const suspension = new THREE.Group();
+  const springMat = new THREE.MeshStandardMaterial({ color: 0x4d5359, metalness: 0.78, roughness: 0.32 });
+  const caliperMat = new THREE.MeshStandardMaterial({ color: 0xc83232, metalness: 0.28, roughness: 0.4 });
+  for (const x of [s.L / 2 - s.fo, s.L / 2 - s.fo - s.wb]) {
+    for (const side of [-1, 1]) {
+      const spring = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.016, 8, 20), springMat);
+      spring.position.set(x, -0.28, side * (s.W / 2 + 0.08));
+      spring.rotation.y = Math.PI / 2;
+      suspension.add(spring);
+      const caliper = new THREE.Mesh(roundBox(0.08, 0.17, 0.1, 0.025), caliperMat);
+      caliper.position.set(x, -0.3, side * (s.W / 2 + 0.12));
+      suspension.add(caliper);
+    }
+  }
+  part('suspension', suspension, new THREE.Vector3(0, -0.38, 0));
+
+  g.traverse((node) => { if (node.isMesh) node.castShadow = true; });
+  return g;
+}
+
 export function buildExploded(assembly, s, have) {
   const F = bodyFns(s);
   const front = assembly === 'front_bumper';

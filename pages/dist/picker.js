@@ -57,12 +57,12 @@ window.CP.pickerView = async (id) => {
   P.cat = P.cat.filter(doorOK);
   const v = b.vehicle || {}; const vd = (() => { try { return typeof v.vin_data === 'string' ? JSON.parse(v.vin_data) : v.vin_data || {}; } catch { return {}; } })();
   const styleTxt = [STYLE_LABEL[m3d.style], m3d.cab && m3d.cab + ' cab', m3d.bed && m3d.bed + ' bed', m3d.doors && m3d.doors + '-door', m3d.dims_source && 'real size'].filter(Boolean).join(' · ');
-  shell(esc(b.job.number), esc(vehLabel(v)), jobTabs(id, '3d') + `<div class="page"><div class="v3wrap list-only"><div class="v3" id="v3" hidden>
-   <div class="bar"><span class="seg"><button id="m2" class="on">Car<span class="lbl"> diagram</span></button><button id="m3" title="Illustrated vehicle view">Illustration</button></span><button id="vm" title="Mirror left/right" hidden>⇄ L/R</button><span class="seg" id="vei"><button id="vx" class="on">Exterior</button><button id="vi">Interior</button></span><button id="vxr" title="See the inner structure">X-ray</button><button id="vex" title="Take the bumper apart">Explode</button><button id="vr" title="Reset view">⟲</button><span class="grow"></span><button id="vl" title="Parts list">☰<span class="lbl"> Parts list</span></button><div class="crumbs" id="crumbs" hidden><button id="vb" title="Back">←</button><span id="crumbl"></span></div></div>
+  shell(esc(b.job.number), esc(vehLabel(v)), jobTabs(id, '3d') + `<div class="page"><div class="v3wrap"><div class="v3" id="v3">
+   <div class="bar"><span class="seg"><button id="m2">2D<span class="lbl"> diagram</span></button><button id="m3" title="Interactive 3D vehicle model">3D<span class="lbl"> model</span></button></span><button id="vm" title="Mirror left/right" hidden>⇄ L/R</button><span class="seg" id="vei"><button id="vx" class="on">Exterior</button><button id="vi">Interior</button></span><button id="vxr" title="See the inner structure">X-ray</button><button id="vex" title="Show the complete vehicle exploded">Exploded view</button><button id="vr" title="Reset view">⟲</button><span class="grow"></span><button id="vl" title="Parts list">☰<span class="lbl"> Parts list</span></button><div class="crumbs" id="crumbs" hidden><button id="vb" title="Back">←</button><span id="crumbl"></span></div></div>
    <div class="d2" id="d2" hidden></div><div class="bulk2 hide" id="bulk2"></div><div class="info" id="vinfo"><b>${esc([v.year, v.make, v.model, v.trim].filter(Boolean).join(' ') || 'Vehicle')}</b><br><span class="mut" id="vstyle">${esc(styleTxt)} · illustrated ${P.exact ? 'exact model' : 'vehicle model'}</span>${vehicleDetails(v, vd)}<br><span id="td">${teardownInfo()}</span></div>
    <div class="legend">${[['replace', 'Replace'], ['repair', 'Repair'], ['refinish', 'Refinish'], ['blend', 'Blend'], ['r&i', 'R&I']].map(([k, n]) => `<span><i style="background:#${MARK_COLORS[k].toString(16).padStart(6, '0')}"></i>${n}</span>`).join('')}<span><i style="background:#2bd47a"></i>Selected</span></div></div>
    <div class="side card" id="side" style="padding:10px"><div class="row" style="margin-bottom:6px"><button class="sm on" id="tsam">Parts list</button><button class="sm" id="tad">Parts catalog</button><span class="grow"></span></div>
-   <div id="psam"><p class="sm mut">Parts are filtered by body style and VIN-sized vehicle dimensions. The illustrations are reference drawings, not OEM diagrams; verify the exact trim and use Parts catalog for VIN-specific supplier results.</p><div id="assembly-cards" class="assembly-cards"></div><div class="row" id="assembly-filter" hidden><button class="sm" id="asmback">← All assemblies</button><b class="grow" id="assembly-title"></b></div><input id="pq" placeholder="Search ${esc([v.year, v.make, v.model].filter(Boolean).join(' ') || 'vehicle')} parts"><div class="plist" id="pl"></div></div><div id="pad" hidden></div></div></div></div>
+   <div id="psam"><p class="sm mut">Tap a door, hood, bumper, or engine on the 3D model to explore its components. These are reference illustrations, not OEM diagrams; verify the exact trim and use Parts catalog for VIN-specific supplier results.</p><div id="assembly-cards" class="assembly-cards"></div><div class="row" id="assembly-filter" hidden><button class="sm" id="asmback">← All assemblies</button><b class="grow" id="assembly-title"></b></div><input id="pq" placeholder="Search ${esc([v.year, v.make, v.model].filter(Boolean).join(' ') || 'vehicle')} parts"><div class="plist" id="pl"></div></div><div id="pad" hidden></div></div></div></div>
    <div class="sheet hide" id="sheet"></div>`);
   if (S.picker) { try { S.picker.destroy(); } catch (e) { console.warn(e); } S.picker = null; } // never keep two 3D views alive
   // The 3D car is built on opening the picker in 3D or switching to 3D; this stand-in keeps state in 2D.
@@ -76,7 +76,7 @@ window.CP.pickerView = async (id) => {
   };
   const pk = stub3d();
   S.picker = pk; P.pk = pk; P.base = history.state?.cp3d || 0; P.hidx = P.base; P.styleTxt = styleTxt;
-  P.vinfo = { color: v.color, make: v.make, model: v.model, year: v.year };
+  P.vinfo = { color: v.color || 'silver', make: v.make, model: v.model, year: v.year };
   pk.build(m3d, P.vinfo);
   pk.setMarks(lineMarks());
   const hasPart = (id) => /^door_[lr][fr]$/.test(id) ? P.cat.some((r) => r.mesh === id + '_skin' || r.mesh === id + '_shell' || r.assembly === id) : P.cat.some((r) => r.mesh === id);
@@ -279,6 +279,21 @@ function rearish(r, mesh) { return r ? (r.assembly === 'rear_bumper' || r.grp ==
 function pick3d(p) {
   if (!p) { closeSheet(); return; }
   if (P.multi.size) return;
+  const row = P.cat.find((r) => r.mesh === p.mesh);
+  const asm = p.assembly || row?.assembly;
+  const root = (asm === 'front_bumper' && p.mesh === 'fbumper_cover')
+    || (asm === 'rear_bumper' && p.mesh === 'rbumper_cover')
+    || (asm === 'hood' && p.mesh === 'hood')
+    || (asm === 'engine' && p.mesh === 'engine')
+    || (asm === 'decklid' && ['decklid', 'liftgate', 'tailgate'].includes(p.mesh))
+    || (/^door_[lr][fr]$/.test(asm || '') && [asm, `${asm}_shell`, `${asm}_skin`].includes(p.mesh));
+  const wholeExploded = P.pk.kind === 'exploded' && P.pk.crumbs[P.pk.crumbs.length - 1] === 'Exploded vehicle';
+  if (root && P.view === '3d' && (P.pk.kind === 'car' || wholeExploded)) {
+    closeSheet();
+    if (asm === 'front_bumper' || asm === 'rear_bumper') toggleExplode(asm);
+    else goInto(asm, P.pk.mode);
+    return;
+  }
   if (P.pk.kind !== 'isolate' && P.pk.canIsolate(p.mesh)) { isolatePart(p.mesh); return; }
   openPart(p.mesh, p.assembly);
 }
@@ -304,7 +319,7 @@ function toggleExplode(which) {
   const pk = P.pk;
   if (!which && pk.kind === 'exploded') { goDepth(0); return; }
   const r = P.sel && P.cat.find((x) => x.mesh === P.sel);
-  const asm = which || (rearish(r, P.sel) ? 'rear_bumper' : 'front_bumper');
+  const asm = which || 'vehicle';
   if (pk.xray) pk.setXray(false);
   if (pk.mode === 'interior') pk.setMode('exterior');
   pk.explode(asm);
@@ -326,7 +341,7 @@ function drawCrumbs() {
   const parts = cr.map((c, i) => i < cr.length - 1 ? `<button class="cb" data-d="${i}">${esc(c)}</button>` : `<b>${esc(c)}</b>`);
   if (pk.xray && pk.kind === 'car') parts.push('<span class="mut">X-ray</span>');
   let extra = '';
-  if (pk.kind === 'exploded') { const front = cr[cr.length - 1] === 'Front bumper'; extra = `<button class="cb sw" id="vsw">${front ? 'Rear bumper' : 'Front bumper'} \u21c4</button>`; }
+  if (pk.kind === 'exploded' && cr[cr.length - 1] !== 'Exploded vehicle') { const front = cr[cr.length - 1] === 'Front bumper'; extra = `<button class="cb sw" id="vsw">${front ? 'Rear bumper' : 'Front bumper'} \u21c4</button>`; }
   $('#crumbl').innerHTML = parts.join('<span class="sep">\u203a</span>') + extra;
   $$('#crumbl [data-d]').forEach((b) => b.onclick = () => goDepth(Number(b.dataset.d)));
   $('#vsw')?.addEventListener('click', () => { closeSheet(); toggleExplode(cr[cr.length - 1] === 'Front bumper' ? 'rear_bumper' : 'front_bumper'); });
@@ -408,7 +423,7 @@ function setView(mode) {
   $('#m2').classList.toggle('on', is2); $('#m3').classList.toggle('on', !is2);
   $('#vm').hidden = !is2 || !!P.assembly; for (const k of ['#vei', '#vxr', '#vex']) $(k).hidden = is2;
   if (is2) { if (P.pk.depth || P.pk.kind !== 'car') P.pk.setMode('exterior'); P.dg.select(P.sel); P.dg.setMulti(P.multi); if (!P.assembly) requestAnimationFrame(() => P.dg.refit()); }
-  else if (P.pk.stub) { const me = P; ensure3d().then((pk) => { if (!pk || P !== me || P.view !== '3d') return; if (P.sel) showOnModel(P.sel); pk.select(P.sel); pk.resize?.(); drawCrumbs(); }); }
+  else if (P.pk.stub) { const me = P; ensure3d().then((pk) => { if (!pk || P !== me || P.view !== '3d') return; if (!P.autoExploded && pk.kind === 'car') { P.autoExploded = true; pk.explode('vehicle', 'Exploded vehicle'); } if (P.sel) showOnModel(P.sel); pk.select(P.sel); pk.resize?.(); drawCrumbs(); }); }
   else { if (P.sel) showOnModel(P.sel); P.pk.select(P.sel); P.pk.resize?.(); }
   drawBulk(); drawCrumbs();
 }

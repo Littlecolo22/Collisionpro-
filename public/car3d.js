@@ -5,7 +5,7 @@ import * as THREE from './vendor/three.module.min.js';
 import { OrbitControls } from './vendor/addons/controls/OrbitControls.js';
 import { GLTFLoader } from './vendor/addons/loaders/GLTFLoader.js';
 import { buildExterior, mats, roundBox, contactShadowTex, honeycombTex, clamp } from './carbody.js';
-import { buildExploded, buildStructure, detailPart, ghostify } from './carparts.js';
+import { buildExploded, buildVehicleExploded, buildStructure, detailPart, ghostify } from './carparts.js';
 import { lookFor, applyLook } from './carlooks.js';
 import { studioEnvironment, studioLights, createFloor, backdropTex, wheelShadows, qualityGovernor, DETAIL_LAYER } from './carstudio.js';
 
@@ -15,7 +15,7 @@ export function paintHex(color) {
   const c = String(color || '').toLowerCase().trim();
   if (/^#?[0-9a-f]{6}$/.test(c)) return parseInt(c.replace('#', ''), 16);
   for (const k of Object.keys(PAINTS)) if (c.includes(k)) return PAINTS[k];
-  return 0x8fa3b8;
+  return PAINTS.silver;
 }
 
 // ---------- Body style dimensions (meters; d = distance from front bumper) ----------
@@ -182,6 +182,15 @@ const DOOR_LAYOUT = {
   check: { geo: () => boxAt(-0.07, 0.07, -0.015, 0.015, -0.015, 0.015), mat: 'metal', p: [-0.5, -0.02, 0.14] },
   mirror: { geo: () => boxAt(-0.1, 0.1, -0.07, 0.07, -0.05, 0.05), mat: 'paint', p: [-0.4, 0.42, 0.7] },
 };
+const HOOD_LAYOUT = {
+  hood: { p: [0, 0, 0.12], scale: 1.25 },
+  hood_insulator: { p: [0, -0.03, -0.24], scale: 1.05 },
+  hood_hinge_l: { p: [-0.63, -0.34, 0.04], scale: 0.52 },
+  hood_hinge_r: { p: [0.63, -0.34, 0.04], scale: 0.52 },
+  hood_latch: { p: [0, -0.54, 0.06], scale: 0.62 },
+  hood_strut: { p: [0.56, 0.16, -0.08], scale: 0.64 },
+  hood_emblem: { p: [0, 0.44, 0.16], scale: 0.42 },
+};
 function doorSlot(mesh) {
   if (/^mirror_/.test(mesh)) return 'mirror';
   const m = mesh.match(/^door_[lr][fr]_(.+)$/); return m ? m[1] : null;
@@ -322,7 +331,7 @@ export function createPicker(container, opts = {}) {
   container.appendChild(renderer.domElement);
   const ac = new AbortController(); const sig = { signal: ac.signal }; // every canvas listener of this picker goes with it
   const scene = new THREE.Scene();
-  let BG_CAR = backdropTex({ bg: '#e8edf1', grad: 0.05, refl: 0 }); const BG_ISO = gradientTex('#d9dcdf', '#9a9fa5');
+  let BG_CAR = backdropTex({ bg: '#e8edf1', grad: 0.05, refl: 0 }); const BG_ISO = gradientTex('#d9dcdf', '#9a9fa5'); const BG_EXPLODED = new THREE.Color(0xffffff);
   scene.background = BG_CAR;
   scene.environment = SHARED.env;
   studioLights(scene);
@@ -459,7 +468,7 @@ export function createPicker(container, opts = {}) {
       views.exterior = { pos: tgt.clone().addScaledVector(dir, L * 1.3), target: tgt, min: 1.5, max: 14 };
     } else views.exterior = { pos: new THREE.Vector3(L * 0.78, 1.75, L * 0.88), portrait: new THREE.Vector3(L * 0.95, spec.roof + 1.55, L * 0.62), target: new THREE.Vector3(0, spec.belt * 0.55, 0), min: 1.5, max: 14 };
     const stl = (spec.look && spec.look.studio) || {};
-    BG_CAR.dispose(); BG_CAR = backdropTex({ bg: '#e8edf1', grad: 0.05, refl: 0 }); floorObj.setLook({ ...stl, bg: '#e8edf1', grad: 0.05, refl: 0 });
+    BG_CAR.dispose(); BG_CAR = backdropTex({ bg: '#ffffff', grad: 0.05, refl: 0 }); floorObj.setLook({ ...stl, bg: '#ffffff', grad: 0.05, refl: 0 });
     const cabX = spec.L / 2 - (spec.cowl + 0.8);
     views.interior = { pos: new THREE.Vector3(cabX - 2.0, spec.roof + 1.6, 1.4), target: new THREE.Vector3(cabX, spec.belt - 0.15, 0), min: 0.6, max: 6 };
     floorObj.setFade(L * 0.5, L * 1.9); if (wshadow) { scene.remove(wshadow); floorObj.state.hide.splice(floorObj.state.hide.indexOf(wshadow), 1); } wshadow = wheelShadows(spec); scene.add(wshadow); floorObj.state.hide.push(wshadow);
@@ -484,15 +493,16 @@ export function createPicker(container, opts = {}) {
   // show the scene for the current level
   function show() {
     const car = kind === 'car';
-    if (ext) ext.visible = (car && mode === 'exterior') || kind === 'exploded';
+    const wholeExploded = kind === 'exploded' && cur.assembly === 'vehicle';
+    if (ext) ext.visible = (car && mode === 'exterior') || (kind === 'exploded' && !wholeExploded);
     if (int) int.visible = car && mode === 'interior';
     if (struct) struct.visible = car && mode === 'exterior' && xray;
     ghostExt((car && mode === 'exterior' && xray) || kind === 'exploded');
     if (drill) drill.visible = kind === 'drill';
     if (exg) exg.visible = kind === 'exploded';
     if (iso) iso.visible = kind === 'isolate';
-    ground.visible = shadow.visible = car || kind === 'exploded'; if (wshadow) wshadow.visible = car;
-    scene.background = kind === 'isolate' ? BG_ISO : BG_CAR;
+    ground.visible = shadow.visible = (car || kind === 'exploded') && !wholeExploded; if (wshadow) wshadow.visible = car && !wholeExploded;
+    scene.background = kind === 'isolate' ? BG_ISO : wholeExploded ? BG_EXPLODED : BG_CAR;
     refreshAll();
   }
   function nav() { opts.onNav && opts.onNav({ depth: stack.length, crumbs: [...stack.map((s) => s.cur.label), cur.label], kind, cur }); }
@@ -540,6 +550,7 @@ export function createPicker(container, opts = {}) {
     for (const r of items) {
       const slot = isDoor ? doorSlot(r.mesh) : null;
       const lay = slot && DOOR_LAYOUT[slot];
+      const hoodLayout = assembly === 'hood' ? HOOD_LAYOUT[r.mesh] : null;
       let obj;
       if (lay) {
         if (lay.group) { obj = new THREE.Group(); for (const c of lay.group()) { c.material = mkMat(lay.mat); obj.add(c); } }
@@ -547,15 +558,21 @@ export function createPicker(container, opts = {}) {
         obj.position.set(right ? -lay.p[0] : lay.p[0], lay.p[1], lay.p[2]);
       } else {
         const art = componentArt(r, mkMat);
-        art.scale.setScalar(0.65);
         obj = new THREE.Group(); obj.add(art);
-        const col = gi % cols, row = Math.floor(gi / cols); gi++;
-        obj.position.set((col - (cols - 1) / 2) * 0.62, 0.35 - row * 0.42, 0);
+        if (hoodLayout) {
+          art.scale.setScalar(hoodLayout.scale);
+          obj.position.set(...hoodLayout.p);
+        } else {
+          art.scale.setScalar(0.65);
+          const col = gi % cols, row = Math.floor(gi / cols); gi++;
+          obj.position.set((col - (cols - 1) / 2) * 0.62, 0.35 - row * 0.42, 0);
+        }
       }
       obj.name = r.mesh; obj.userData.part = r.mesh;
       const short = String(r.short || r.name).slice(0, 26);
       const lbl = labelSprite(short, 0.7); lbl.position.set(0, lay ? 0.0 : 0.15, 0.09); lbl.userData.label = true;
       if (lay) { const box = new THREE.Box3().setFromObject(obj); lbl.position.set(0, (box.max.y - obj.position.y) + 0.06, 0.02); }
+      else if (hoodLayout) lbl.position.set(0, 0.31 * hoodLayout.scale, 0.09);
       obj.add(lbl);
       drill.add(obj);
     }
@@ -571,6 +588,21 @@ export function createPicker(container, opts = {}) {
   function explode(assembly, title) {
     if (kind === 'isolate') back(true);
     if (kind === 'exploded') back(true);
+    if (assembly === 'vehicle') {
+      const g = buildVehicleExploded(spec, ext, int);
+      illustrate(g);
+      prep(g);
+      push({ kind: 'exploded', label: title || 'Exploded vehicle', assembly: 'vehicle' });
+      exg = g;
+      scene.add(g);
+      show();
+      const box = new THREE.Box3().setFromObject(g);
+      const target = box.isEmpty() ? new THREE.Vector3(0, 0.8, 0) : box.getCenter(new THREE.Vector3());
+      applyCam(fitView({ pos: target.clone().add(new THREE.Vector3(spec.L * 0.72, spec.roof + 1.2, spec.L * 0.82)), target, min: 0.8, max: 12 }, box, 0.86, 0.78));
+      opts.onMode && opts.onMode('exploded', { assembly: 'vehicle', title: cur.label });
+      nav();
+      return;
+    }
     const g = buildExploded(assembly, spec, opts.hasPart || null);
     illustrate(g);
     prep(g);
