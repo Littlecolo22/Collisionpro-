@@ -404,7 +404,7 @@ function bindDetails(sh) {
 function setView(mode) {
   P.view = mode === '2d' ? '2d' : '3d'; localStorage.setItem('cp_view', P.view);
   const is2 = P.view === '2d';
-  $('#v3').classList.toggle('is2d', is2); $('#d2').hidden = !is2 || !!P.assembly; $('#asm2d').hidden = !is2 || !P.assembly;
+  $('#v3').classList.toggle('is2d', is2); $('#d2').hidden = !is2 || !!P.assembly;
   $('#asmback').hidden = !is2 || !P.assembly; $('#v3').classList.toggle('hasassembly', is2 && !!P.assembly);
   $('#m2').classList.toggle('on', is2); $('#m3').classList.toggle('on', !is2);
   $('#vm').hidden = !is2 || !!P.assembly; for (const k of ['#vei', '#vxr', '#vex']) $(k).hidden = is2;
