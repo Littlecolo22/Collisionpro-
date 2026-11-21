@@ -4,8 +4,9 @@
 - Frontend: public/index.html, public/app.js (SPA, hash routes), public/styles.css, public/car3d.js (Three.js picker), public/vendor (three r18x + OrbitControls/GLTFLoader).
 - Backend additions: catalog.js model3dFrom() (9 detailed styles -> catalog family sedan/coupe/truck/suv), logic.js decodeVin adds cab/bed/wheelbase + model3d,
   r_jobs.js jobBundle.model3d, GET /api/models3d (shop-uploaded .glb keyed caption "year|make|model", year may be *), files accept .glb with kind=model3d.
-- src/partsapi.js: Autodoc Parts Catalog (RapidAPI) adapter. Server-side only, key = Worker secret RAPIDAPI_KEY (local: .dev.vars, never committed).
-  Setting vin_parts_provider: sample | autodoc | autodoc_mock. D1 cache table api_cache. Routes /api/parts/{status,test,vehicle,categories,articles,article/:id}.
+- src/partsapi.js: Autodoc Parts Catalog (RapidAPI) and PartsTech supplier quote adapters. Server-side only; keys are Worker secrets, local: .dev.vars (never committed).
+  PartsTech uses the shop's PARTSTECH_USER_ID/PARTSTECH_USER_KEY; optional PARTSTECH_PARTNER_ID/PARTSTECH_PARTNER_KEY are included only when supplied. Quote searches are not cached so supplier price/availability is fetched on every search; store lists and auth tokens are cached.
+  Setting vin_parts_provider: sample | autodoc | autodoc_mock | partstech_autodoc | partstech_mock. D1 cache table api_cache. Routes /api/parts/{status,test,search,vehicle,categories,articles,article/:id}.
   Endpoints used: /api/vin/decoder-v3|v1|v5/{vin}, /api/category/type-id/1/products-groups-variant-1/{vehicleId}/lang-id/4,
   /api/category/search-for-the-commodity-group-tree-by-description/..., /api/articles/list/type-id/1/vehicle-id/{v}/category-id/{c}/lang-id/4,
   /api/articles/details/article-id/{id}/lang-id/4, /api/articles/article-all-media-info, POST /api/articles/get-oems-by-list-of-articles-ids {articleIds:[]}.
@@ -14,7 +15,7 @@
 
 ## Pages move (prepared 2026-11-14, not deployed)
 - ./build_pages.sh bundles src/pages_entry.js (wraps index.js; daily job runs on first request after 11:15 UTC, claimed via D1 table daily_runs) into pages/dist/_worker.js plus static files.
-- pages/wrangler.toml: project collisionpro, D1 collisionpro (fe051cca-...), AI binding. Deploy: cd pages && CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... ../wr pages project create collisionpro --production-branch main; ../wr pages deploy; then pages secret put RAPIDAPI_KEY, PARTSTECH_USER_ID, PARTSTECH_USER_KEY, SETUP_TOKEN (+ owner from .prod.owner/.prod.seed.json).
+- pages/wrangler.toml: project collisionpro, D1 collisionpro (fe051cca-...), AI binding. Deploy: cd pages && CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... ../wr pages project create collisionpro --production-branch main; ../wr pages deploy; then add the needed secrets in Pages Settings → Variables and Secrets, including all four PartsTech secrets when enabled.
 - Blocker: vault-saved token (collisionpro_cf_token) is not substituted in exec (literal <secret> tag reached Cloudflare). trendbots token lacks Pages permission (Authentication error on pages/projects) and must not be used for this.
 - Local check: pages dev serves / (200), SPA routes (200), /api/health ok, /api/jobs 401 without sign-in.
 

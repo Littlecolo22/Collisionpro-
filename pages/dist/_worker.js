@@ -7924,10 +7924,11 @@ function registerMoney(R2) {
     const kvn = new Set(((await c.db.prepare("SELECT name, value FROM private_kv WHERE name IN ('sms_user','sms_pass','sms_device','sms_method')").all().catch(() => null))?.results || []).map((r) => r.name === "sms_method" ? "m_" + r.value : r.name));
     const smsMethodNow = kvn.has("m_device") ? "device" : kvn.has("m_manual") ? "manual" : kvn.has("m_gateway") || kvn.has("sms_user") && kvn.has("sms_pass") ? "gateway" : "manual";
     const smsOn = smsMethodNow === "device" ? kvn.has("sms_device") : smsMethodNow === "gateway" ? kvn.has("sms_user") && kvn.has("sms_pass") : false;
+    const partstechReady = !!(env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY);
     s.integrations = [
       { key: "ai", name: "AI damage detection + VIN / odometer reading", status: env.AI ? "connected (Cloudflare Workers AI)" : "not bound", real: !!env.AI },
       { key: "vin", name: "VIN decode (NHTSA vPIC)", status: "connected (free public API)", real: true },
-      { key: "vin_parts", name: "Parts catalog (PartsTech, Autodoc)", status: { partstech_autodoc: `PartsTech first for US VINs${env.PARTSTECH_PARTNER_ID ? "" : env.PARTSTECH_USER_ID ? " (waiting for partner keys from PartsTech; your user ID and API key are saved)" : " (no PartsTech keys saved)"}, Autodoc backup${env.RAPIDAPI_KEY ? "" : " (no key)"}`, autodoc: env.RAPIDAPI_KEY ? "Autodoc live" : "Autodoc selected, no key stored", autodoc_mock: "Autodoc mock responses", partstech_mock: "PartsTech mock responses" }[s.vin_parts_provider] || "no catalog: parts are entered by hand", real: s.vin_parts_provider === "autodoc" && !!env.RAPIDAPI_KEY || s.vin_parts_provider === "partstech_autodoc" && !!(env.PARTSTECH_PARTNER_ID || env.RAPIDAPI_KEY), needs: "PartsTech: partner ID and key (requested from PartsTech). Autodoc: free Basic plan subscription on RapidAPI (mainly European aftermarket)" },
+      { key: "vin_parts", name: "Parts catalog (PartsTech, Autodoc)", status: { partstech_autodoc: `PartsTech first for US VINs${partstechReady ? " (user credentials detected)" : " (username and API key not configured)"}, Autodoc backup${env.RAPIDAPI_KEY ? "" : " (no key)"}`, autodoc: env.RAPIDAPI_KEY ? "Autodoc live" : "Autodoc selected, no key stored", autodoc_mock: "Autodoc mock responses", partstech_mock: "PartsTech mock responses" }[s.vin_parts_provider] || "no catalog: parts are entered by hand", real: s.vin_parts_provider === "autodoc" && !!env.RAPIDAPI_KEY || s.vin_parts_provider === "partstech_autodoc" && (partstechReady || !!env.RAPIDAPI_KEY), needs: "PartsTech user ID and API key. Partner credentials are optional if PartsTech has issued them for the integration. Autodoc: free Basic plan subscription on RapidAPI (mainly European aftermarket)" },
       { key: "estimating_db", name: "Estimating database & P-pages (CCC ONE / Mitchell / Audatex)", status: "placeholder: sample labor guide; EMS / BMS / CSV import + export work", real: false, needs: "Licensed CCC ONE, Mitchell Cloud Estimating or Audatex Qapter seat and their partner API agreement" },
       { key: "drp", name: "Insurer DRP networks (assignments, approvals, e-payments)", status: "placeholder: workflow tracked in-app; BMS export for submission", real: false, needs: "Insurer DRP agreement and a network connection (CCC Secure Share, Mitchell Connect, Audatex/Solera)" },
       { key: "parts_network", name: "Parts ordering network", status: "placeholder: sample quotes from editable price list; POs tracked in-app", real: false, needs: "PartsTrader, CollisionLink (OEC) or vendor API accounts" },
@@ -8904,13 +8905,15 @@ async function cachePut(env, k, v) {
   await env.DB.prepare("INSERT OR REPLACE INTO api_cache (k, body, status, created) VALUES (?,?,200,?)").bind(k, JSON.stringify(v), Math.floor(Date.now() / 1e3)).run();
 }
 function ptReady(env) {
-  return !!(env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY && env.PARTSTECH_PARTNER_ID && env.PARTSTECH_PARTNER_KEY);
+  return !!(env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY);
 }
 async function ptToken(env) {
   const hit = await cacheGet(env, "pt:token", 3e3);
   if (hit?.t) return hit.t;
-  if (!ptReady(env)) throw new ApiError("no_key", env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY ? "PartsTech: waiting for partner keys from PartsTech. Your user ID and API key are saved." : "PartsTech: no user ID and API key saved yet.");
-  const r = await fetch(PT2 + "/oauth/access", { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(15e3), body: JSON.stringify({ accessType: "user", credentials: { user: { id: env.PARTSTECH_USER_ID, key: env.PARTSTECH_USER_KEY }, partner: { id: env.PARTSTECH_PARTNER_ID, key: env.PARTSTECH_PARTNER_KEY } } }) }).catch(() => null);
+  if (!ptReady(env)) throw new ApiError("no_key", "PartsTech: no user ID and API key saved yet.");
+  const credentials = { user: { id: env.PARTSTECH_USER_ID, key: env.PARTSTECH_USER_KEY } };
+  if (env.PARTSTECH_PARTNER_ID && env.PARTSTECH_PARTNER_KEY) credentials.partner = { id: env.PARTSTECH_PARTNER_ID, key: env.PARTSTECH_PARTNER_KEY };
+  const r = await fetch(PT2 + "/oauth/access", { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(15e3), body: JSON.stringify({ accessType: "user", credentials }) }).catch(() => null);
   if (!r) throw new ApiError("network", "PartsTech did not answer in time.");
   const d = await r.json().catch(() => ({}));
   if (!r.ok || !d.accessToken) throw new ApiError(r.status === 429 ? "rate_limited" : "auth", d?.error?.message || `PartsTech sign-in failed (${r.status})`);
@@ -8919,7 +8922,7 @@ async function ptToken(env) {
 }
 async function ptCall(env, kind, path, body, ttl) {
   const k = `pt:${path}:${body ? JSON.stringify(body) : ""}`;
-  const hit = await cacheGet(env, k, ttl);
+  const hit = ttl > 0 ? await cacheGet(env, k, ttl) : null;
   if (hit) return { data: hit, cached: true };
   const tok = await ptToken(env);
   const r = await fetch(PT2 + path, { method: body ? "POST" : "GET", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : void 0, signal: AbortSignal.timeout(2e4) }).catch(() => null);
@@ -8931,7 +8934,7 @@ async function ptCall(env, kind, path, body, ttl) {
   if (r.status === 429) throw new ApiError("rate_limited", "PartsTech rate limit reached.", Number(r.headers.get("retry-after")) || 60);
   const d = await r.json().catch(() => null);
   if (!r.ok) throw new ApiError("upstream", d?.error?.message || `PartsTech error ${r.status}`);
-  await cachePut(env, k, d);
+  if (ttl > 0) await cachePut(env, k, d);
   return { data: d, cached: false };
 }
 function ptNorm(p) {
@@ -8964,7 +8967,7 @@ async function partstechSearch(env, vin, q, mock) {
   const st = await ptCall(env, "stores", "/stores", null, 86400);
   const store = (Array.isArray(st.data) ? st.data : [])[0];
   if (!store) throw new ApiError("no_store", "Your PartsTech account has no connected supplier store.");
-  const r = await ptCall(env, "quote", "/catalog/quote", { searchParams: { vin, keyword: q }, storeId: store.id }, 3600);
+  const r = await ptCall(env, "quote", "/catalog/quote", { searchParams: { vin, keyword: q }, storeId: store.id }, 0);
   return { articles: (r.data?.parts || []).slice(0, 40).map(ptNorm), cached: r.cached, store: store.name };
 }
 async function autodocSearch(env, vin, q, mock) {

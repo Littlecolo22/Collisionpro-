@@ -168,16 +168,18 @@ function MOCK(kind, path, body) {
 }
 
 // ---------- PartsTech adapter (US aftermarket: live supplier pricing and availability) ----------
-// Auth: POST /oauth/access {accessType:'user', credentials:{user:{id,key}, partner:{id,key}}} -> bearer JWT.
-// Secrets: PARTSTECH_USER_ID, PARTSTECH_USER_KEY, PARTSTECH_PARTNER_ID, PARTSTECH_PARTNER_KEY (all four required by PartsTech).
+// Auth: POST /oauth/access with the shop's user ID and API key -> bearer JWT.
+// Partner credentials are included only when a PartsTech integration has supplied them.
 const PT = 'https://api.partstech.com';
 async function cacheGet(env, k, ttl) { await ensureCache(env); const r = await env.DB.prepare('SELECT body, created FROM api_cache WHERE k=?').bind(k).first(); return r && Math.floor(Date.now() / 1000) - r.created < ttl ? JSON.parse(r.body) : null; }
 async function cachePut(env, k, v) { await env.DB.prepare('INSERT OR REPLACE INTO api_cache (k, body, status, created) VALUES (?,?,200,?)').bind(k, JSON.stringify(v), Math.floor(Date.now() / 1000)).run(); }
-function ptReady(env) { return !!(env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY && env.PARTSTECH_PARTNER_ID && env.PARTSTECH_PARTNER_KEY); }
+function ptReady(env) { return !!(env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY); }
 async function ptToken(env) {
   const hit = await cacheGet(env, 'pt:token', 3000); if (hit?.t) return hit.t;
-  if (!ptReady(env)) throw new ApiError('no_key', (env.PARTSTECH_USER_ID && env.PARTSTECH_USER_KEY) ? 'PartsTech: waiting for partner keys from PartsTech. Your user ID and API key are saved.' : 'PartsTech: no user ID and API key saved yet.');
-  const r = await fetch(PT + '/oauth/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ accessType: 'user', credentials: { user: { id: env.PARTSTECH_USER_ID, key: env.PARTSTECH_USER_KEY }, partner: { id: env.PARTSTECH_PARTNER_ID, key: env.PARTSTECH_PARTNER_KEY } } }) }).catch(() => null);
+  if (!ptReady(env)) throw new ApiError('no_key', 'PartsTech: no user ID and API key saved yet.');
+  const credentials = { user: { id: env.PARTSTECH_USER_ID, key: env.PARTSTECH_USER_KEY } };
+  if (env.PARTSTECH_PARTNER_ID && env.PARTSTECH_PARTNER_KEY) credentials.partner = { id: env.PARTSTECH_PARTNER_ID, key: env.PARTSTECH_PARTNER_KEY };
+  const r = await fetch(PT + '/oauth/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ accessType: 'user', credentials }) }).catch(() => null);
   if (!r) throw new ApiError('network', 'PartsTech did not answer in time.');
   const d = await r.json().catch(() => ({}));
   if (!r.ok || !d.accessToken) throw new ApiError(r.status === 429 ? 'rate_limited' : 'auth', d?.error?.message || `PartsTech sign-in failed (${r.status})`);
@@ -186,7 +188,7 @@ async function ptToken(env) {
 }
 async function ptCall(env, kind, path, body, ttl) {
   const k = `pt:${path}:${body ? JSON.stringify(body) : ''}`;
-  const hit = await cacheGet(env, k, ttl); if (hit) return { data: hit, cached: true };
+  const hit = ttl > 0 ? await cacheGet(env, k, ttl) : null; if (hit) return { data: hit, cached: true };
   const tok = await ptToken(env);
   const r = await fetch(PT + path, { method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(20000) }).catch(() => null);
   if (!r) throw new ApiError('network', 'PartsTech did not answer in time.');
@@ -194,7 +196,7 @@ async function ptCall(env, kind, path, body, ttl) {
   if (r.status === 429) throw new ApiError('rate_limited', 'PartsTech rate limit reached.', Number(r.headers.get('retry-after')) || 60);
   const d = await r.json().catch(() => null);
   if (!r.ok) throw new ApiError('upstream', d?.error?.message || `PartsTech error ${r.status}`);
-  await cachePut(env, k, d);
+  if (ttl > 0) await cachePut(env, k, d);
   return { data: d, cached: false };
 }
 function ptNorm(p) {
@@ -212,7 +214,7 @@ export async function partstechSearch(env, vin, q, mock) {
   const st = await ptCall(env, 'stores', '/stores', null, 86400);
   const store = (Array.isArray(st.data) ? st.data : [])[0];
   if (!store) throw new ApiError('no_store', 'Your PartsTech account has no connected supplier store.');
-  const r = await ptCall(env, 'quote', '/catalog/quote', { searchParams: { vin, keyword: q }, storeId: store.id }, 3600);
+  const r = await ptCall(env, 'quote', '/catalog/quote', { searchParams: { vin, keyword: q }, storeId: store.id }, 0);
   return { articles: (r.data?.parts || []).slice(0, 40).map(ptNorm), cached: r.cached, store: store.name };
 }
 async function autodocSearch(env, vin, q, mock) {

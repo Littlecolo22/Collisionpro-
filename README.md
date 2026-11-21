@@ -40,6 +40,8 @@ The project checks JavaScript syntax, local module paths, and source-to-Pages as
 2. Install Wrangler if needed: `npm install -g wrangler`.
 3. Start local Worker development using the project Wrangler configuration and follow `BUILD_NOTES.md` for D1 setup.
 
+For live PartsTech searches, set the shop's `PARTSTECH_USER_ID` (username/user ID) and `PARTSTECH_USER_KEY` (API key) as server-side secrets in the Cloudflare Pages project's Settings → Variables and Secrets (or locally in `.dev.vars`). The connector requests a user token with those credentials; if PartsTech has supplied integration-partner credentials, the optional `PARTSTECH_PARTNER_ID` and `PARTSTECH_PARTNER_KEY` are also supported. Then select **PartsTech first for US vehicles, Autodoc backup** in the app's Settings and use **Test connection**. PartsTech quote searches fetch current supplier prices and availability; adding a result saves its returned price to that estimate. Existing estimates are not automatically repriced. The built-in vehicle diagrams are reference diagrams and are not provided or updated by PartsTech.
+
 ### Deploy the website to Cloudflare Pages
 
 The Cloudflare Pages project should use the repository root as its root directory. The checked-in root `wrangler.toml` identifies the Pages build output (`pages/dist`) and D1/AI bindings. The current build command `npm run build && npm test` is supported.
