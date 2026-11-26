@@ -1,1 +1,2 @@
-PLACEHOLDER_WILL_FAIL
+/** OrbitControls via Three r160 examples on jsDelivr */
+export { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';

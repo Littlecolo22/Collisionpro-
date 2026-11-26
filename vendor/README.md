@@ -1,6 +1,9 @@
 # Vendor Three.js
 
-- `three.module.min.js` re-exports Three r160 from jsDelivr CDN (keeps repo small).
-- OrbitControls / GLTFLoader are the RR relative-import versions.
+These files re-export Three.js r160 from jsDelivr so the 3D picker works without large binaries in the repo.
 
-If you prefer offline Three, replace `three.module.min.js` with the full RR file from `vendor-three-fix.zip`.
+- `three.module.min.js`
+- `addons/controls/OrbitControls.js`
+- `addons/loaders/GLTFLoader.js`
+
+The app needs network access to `cdn.jsdelivr.net` for 3D. For fully offline builds, replace with the files from `vendor-three-fix.zip`.
